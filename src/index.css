@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-100 text-slate-800 min-h-screen;
+  }
+}
+
+@layer utilities {
+  .eliminated {
+    @apply line-through text-slate-400;
+  }
+}
