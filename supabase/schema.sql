@@ -27,7 +27,7 @@ create table if not exists players (
 create table if not exists player_scores (
   id uuid primary key default gen_random_uuid(),
   player_id uuid not null references players(id) on delete cascade,
-  round_name text not null,  -- 'Play-In', 'Round of 64', 'Round of 32', 'Sweet Sixteen', 'Elite Eight', 'Final Four', 'Championship'
+  round_name text not null,  -- 'Round of 64', 'Round of 32', 'Sweet Sixteen', 'Elite Eight', 'Final Four', 'Championship'
   points integer not null default 0,
   updated_at timestamptz default now(),
   unique(player_id, round_name)
