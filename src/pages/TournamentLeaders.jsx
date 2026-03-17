@@ -77,6 +77,9 @@ export default function TournamentLeaders() {
     load()
   }, [])
 
+  // Reset page when filters change (must run before any conditional return)
+  useEffect(() => { setPage(0) }, [selectedRound, seedFilter, draftFilter])
+
   if (loading) return <div className="text-center py-16 text-slate-500">Loading leaders...</div>
   if (error) return <div className="text-center py-16 text-red-500">Error: {error}</div>
 
@@ -107,9 +110,6 @@ export default function TournamentLeaders() {
   const totalPages = Math.max(1, Math.ceil(allLeaders.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages - 1)
   const leaders = allLeaders.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE)
-
-  // Reset to page 0 when filters change
-  useEffect(() => { setPage(0) }, [selectedRound, seedFilter, draftFilter])
 
   return (
     <div>
