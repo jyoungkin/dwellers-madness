@@ -25,7 +25,7 @@ const DRAFT_FILTERS = [
   { id: 'drafted', label: 'Drafted only' },
 ]
 
-const TOP_N = 15
+const PAGE_SIZE = 20
 
 function getPoints(player, round) {
   return (player.player_scores || []).find(s => s.round_name === round)?.points ?? 0
@@ -53,6 +53,7 @@ export default function TournamentLeaders() {
   const [selectedRound, setSelectedRound] = useState('total')
   const [seedFilter, setSeedFilter] = useState('all')
   const [draftFilter, setDraftFilter] = useState('all')
+  const [page, setPage] = useState(0)
 
   useEffect(() => {
     async function load() {
@@ -60,7 +61,7 @@ export default function TournamentLeaders() {
       const { data, error } = await supabase
         .from('players')
         .select(`
-          id, name, team, seed, drafter_id,
+          id, name, team, seed, is_eliminated, drafter_id,
           drafter:drafter_id(name),
           player_scores(round_name, points)
         `)
@@ -85,7 +86,7 @@ export default function TournamentLeaders() {
   ]
 
   function getLeaders(roundId) {
-    let list = players
+    let list = players.filter(p => !p.is_eliminated)
     if (draftFilter === 'drafted') list = list.filter(p => !!p.drafter_id)
     list = list.filter(p => passesSeedFilter(p, seedFilter))
     if (roundId === 'total') {
@@ -99,10 +100,16 @@ export default function TournamentLeaders() {
         .filter(p => p._pts > 0)
         .sort((a, b) => b._pts - a._pts)
     }
-    return list.slice(0, TOP_N)
+    return list
   }
 
-  const leaders = getLeaders(selectedRound)
+  const allLeaders = getLeaders(selectedRound)
+  const totalPages = Math.max(1, Math.ceil(allLeaders.length / PAGE_SIZE))
+  const safePage = Math.min(page, totalPages - 1)
+  const leaders = allLeaders.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE)
+
+  // Reset to page 0 when filters change
+  useEffect(() => { setPage(0) }, [selectedRound, seedFilter, draftFilter])
 
   return (
     <div>
@@ -172,6 +179,7 @@ export default function TournamentLeaders() {
             ) : (
               leaders.map((player, idx) => {
                 const isDrafted = !!player.drafter_id
+                const rank = safePage * PAGE_SIZE + idx + 1
                 return (
                   <tr
                     key={player.id}
@@ -179,7 +187,7 @@ export default function TournamentLeaders() {
                       isDrafted ? 'bg-amber-50/60' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'
                     }`}
                   >
-                    <td className="px-3 py-2 text-slate-500 font-medium">{idx + 1}</td>
+                    <td className="px-3 py-2 text-slate-500 font-medium">{rank}</td>
                     <td className="px-3 py-2">
                       <span className={`font-medium text-slate-800 ${isDrafted ? 'text-amber-900' : ''}`}>
                         {player.name}
@@ -202,8 +210,30 @@ export default function TournamentLeaders() {
         </table>
       </div>
 
+      {allLeaders.length > PAGE_SIZE && (
+        <div className="mt-4 flex items-center justify-center gap-4">
+          <button
+            onClick={() => setPage(p => Math.max(0, p - 1))}
+            disabled={safePage === 0}
+            className="px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors"
+          >
+            ← Previous
+          </button>
+          <span className="text-sm text-slate-600">
+            Page {safePage + 1} of {totalPages} ({allLeaders.length} players)
+          </span>
+          <button
+            onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+            disabled={safePage >= totalPages - 1}
+            className="px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors"
+          >
+            Next →
+          </button>
+        </div>
+      )}
+
       <p className="mt-3 text-xs text-slate-400">
-        Showing top {TOP_N}. Sync scores from Admin → ESPN Sync to update.
+        {allLeaders.length} players. Eliminated teams hidden. Sync scores from Admin → ESPN Sync to update.
       </p>
     </div>
   )
