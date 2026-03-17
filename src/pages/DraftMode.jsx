@@ -3,15 +3,15 @@ import { supabase } from '../lib/supabase.js'
 import { getTeamStyle } from '../lib/teamColors.js'
 
 const NUM_DRAFTERS = 3
-const PLAYERS_PER_TEAM = 8
+const PLAYERS_PER_TEAM = 10
 const TOTAL_PICKS = NUM_DRAFTERS * PLAYERS_PER_TEAM
 
 // Draft rules
-const MAX_FROM_SAME_TEAM = 3    // no more than 3 players from the same team
-const MIN_HIGHER_SEEDS = 4      // must draft at least 4 players seeded 5 or higher
-const MIN_UNDERDOGS = 2         // at least 2 of those must be underdogs (seed 9+)
-const HIGHER_SEED_THRESHOLD = 5 // "seed 5 or above"
-const UNDERDOG_THRESHOLD = 9    // "underdog" = seed 9 or higher
+const MAX_PER_SEED_LINE = 2      // max 2 players from any single seed number (e.g. max 2 one-seeds total)
+const MIN_HIGHER_SEEDS = 6       // must draft at least 6 players seeded 5 or higher
+const MIN_UNDERDOGS = 3          // at least 3 of those must be double-digit seeds (10+)
+const HIGHER_SEED_THRESHOLD = 5  // "seed 5 or above"
+const UNDERDOG_THRESHOLD = 10    // "double-digit seed" = seed 10 or higher
 
 // Snake draft: returns which draft_position is on the clock for a given pick number (1-indexed)
 function getDraftPosition(pickNumber) {
@@ -21,11 +21,12 @@ function getDraftPosition(pickNumber) {
   return round % 2 === 0 ? posInRound + 1 : NUM_DRAFTERS - posInRound
 }
 
-function getTeamCounts(picks, playerById) {
+// Count how many picks a drafter has from each seed number (seed line)
+function getSeedLineCounts(picks, playerById) {
   const counts = {}
   for (const pick of picks) {
     const p = playerById[pick.player_id]
-    if (p) counts[p.team] = (counts[p.team] || 0) + 1
+    if (p && p.seed) counts[p.seed] = (counts[p.seed] || 0) + 1
   }
   return counts
 }
@@ -44,23 +45,19 @@ function countUnderdogs(picks, playerById) {
   }).length
 }
 
-// Compute all rule constraints for a given drafter given their current picks
 function getDraftConstraints(drafter, picksById, playerById) {
   const dPicks = picksById[drafter.id] || []
-  const picksRemaining = PLAYERS_PER_TEAM - dPicks.length // includes the current pick
-  const teamCounts = getTeamCounts(dPicks, playerById)
+  const picksRemaining = PLAYERS_PER_TEAM - dPicks.length
+  const seedLineCounts = getSeedLineCounts(dPicks, playerById)
   const higherSeedCount = countHigherSeeds(dPicks, playerById)
   const underdogCount = countUnderdogs(dPicks, playerById)
   const higherSeedsNeeded = Math.max(0, MIN_HIGHER_SEEDS - higherSeedCount)
   const underdogsNeeded = Math.max(0, MIN_UNDERDOGS - underdogCount)
-
-  // "must pick X now" = the remaining picks (including this one) can no longer satisfy the rule
-  // unless every remaining pick fulfills it
   const mustPickUnderdog = picksRemaining > 0 && underdogsNeeded >= picksRemaining
   const mustPickHigherSeed = picksRemaining > 0 && higherSeedsNeeded >= picksRemaining
 
   return {
-    teamCounts,
+    seedLineCounts,
     higherSeedCount,
     underdogCount,
     higherSeedsNeeded,
@@ -115,7 +112,6 @@ export default function DraftMode() {
 
   const onClockDrafter = drafters.find(d => d.draft_position === getDraftPosition(currentPick))
 
-  // Build per-drafter pick map
   const picksById = {}
   for (const pick of picks) {
     if (!picksById[pick.drafter_id]) picksById[pick.drafter_id] = []
@@ -126,15 +122,17 @@ export default function DraftMode() {
     ? getDraftConstraints(onClockDrafter, picksById, playerById)
     : null
 
-  // Filter available players: hide teams at cap and enforce must-pick rules
   const filteredPlayers = undraftedPlayers.filter(p => {
     const q = search.toLowerCase()
     const matchesSearch = !q || p.name.toLowerCase().includes(q) || p.team.toLowerCase().includes(q)
     if (!matchesSearch) return false
     if (!onClockConstraints) return true
 
-    const teamCount = onClockConstraints.teamCounts[p.team] || 0
-    if (teamCount >= MAX_FROM_SAME_TEAM) return false
+    // Block players from seed lines already at cap
+    const seedCount = onClockConstraints.seedLineCounts[p.seed] || 0
+    if (seedCount >= MAX_PER_SEED_LINE) return false
+
+    // Enforce must-pick rules
     if (onClockConstraints.mustPickUnderdog && p.seed < UNDERDOG_THRESHOLD) return false
     if (onClockConstraints.mustPickHigherSeed && p.seed < HIGHER_SEED_THRESHOLD) return false
 
@@ -157,29 +155,32 @@ export default function DraftMode() {
 
     const constraints = getDraftConstraints(onClockDrafter, picksById, playerById)
 
-    // Enforce team cap
-    const teamCount = constraints.teamCounts[player.team] || 0
-    if (teamCount >= MAX_FROM_SAME_TEAM) {
-      setError(`${onClockDrafter.name} already has ${MAX_FROM_SAME_TEAM} players from ${player.team}. Max is ${MAX_FROM_SAME_TEAM} per team.`)
-      setSaving(false)
-      return
-    }
-
-    // Enforce underdog rule (most restrictive — seed 9+)
-    if (constraints.mustPickUnderdog && player.seed < UNDERDOG_THRESHOLD) {
+    // Enforce seed-line cap
+    const seedCount = constraints.seedLineCounts[player.seed] || 0
+    if (seedCount >= MAX_PER_SEED_LINE) {
       setError(
-        `${onClockDrafter.name} must pick an underdog (seed ${UNDERDOG_THRESHOLD}+) — ` +
-        `needs ${constraints.underdogsNeeded} more underdog(s) with only ${constraints.picksRemaining} pick(s) left.`
+        `${onClockDrafter.name} already has ${MAX_PER_SEED_LINE} players from the ${player.seed}-seed line. ` +
+        `Max is ${MAX_PER_SEED_LINE} per seed line.`
       )
       setSaving(false)
       return
     }
 
-    // Enforce higher-seed rule (seed 5+)
+    // Enforce double-digit seed rule (most restrictive)
+    if (constraints.mustPickUnderdog && player.seed < UNDERDOG_THRESHOLD) {
+      setError(
+        `${onClockDrafter.name} must pick a double-digit seed (${UNDERDOG_THRESHOLD}+) — ` +
+        `needs ${constraints.underdogsNeeded} more with only ${constraints.picksRemaining} pick(s) left.`
+      )
+      setSaving(false)
+      return
+    }
+
+    // Enforce higher-seed rule
     if (constraints.mustPickHigherSeed && player.seed < HIGHER_SEED_THRESHOLD) {
       setError(
-        `${onClockDrafter.name} must pick a player seeded ${HIGHER_SEED_THRESHOLD} or higher — ` +
-        `needs ${constraints.higherSeedsNeeded} more seed ${HIGHER_SEED_THRESHOLD}+ player(s) with only ${constraints.picksRemaining} pick(s) left.`
+        `${onClockDrafter.name} must pick a player seeded ${HIGHER_SEED_THRESHOLD}+ — ` +
+        `needs ${constraints.higherSeedsNeeded} more with only ${constraints.picksRemaining} pick(s) left.`
       )
       setSaving(false)
       return
@@ -223,15 +224,13 @@ export default function DraftMode() {
     await reload()
   }
 
-  // Determine the active constraint label for the search box
+  const bannerIsRed = onClockConstraints?.mustPickUnderdog
+  const bannerIsOrange = !bannerIsRed && onClockConstraints?.mustPickHigherSeed
   const searchPlaceholder = onClockConstraints?.mustPickUnderdog
-    ? `Only underdogs (seed ${UNDERDOG_THRESHOLD}+) shown...`
+    ? `Only double-digit seeds (${UNDERDOG_THRESHOLD}+) shown...`
     : onClockConstraints?.mustPickHigherSeed
       ? `Only seed ${HIGHER_SEED_THRESHOLD}+ shown...`
       : 'Search player name or team...'
-
-  const bannerIsRed = onClockConstraints?.mustPickUnderdog
-  const bannerIsOrange = !bannerIsRed && onClockConstraints?.mustPickHigherSeed
 
   if (loading) return <div className="text-center py-16 text-slate-500">Loading draft...</div>
 
@@ -245,9 +244,9 @@ export default function DraftMode() {
             Snake draft — {NUM_DRAFTERS} teams × {PLAYERS_PER_TEAM} picks = {TOTAL_PICKS} total picks
           </p>
           <div className="flex flex-wrap gap-x-3 mt-0.5 text-xs text-slate-500">
-            <span>📋 Max {MAX_FROM_SAME_TEAM} from any one team</span>
-            <span>🔶 At least {MIN_HIGHER_SEEDS} players seeded {HIGHER_SEED_THRESHOLD}+</span>
-            <span>🟣 At least {MIN_UNDERDOGS} underdogs (seed {UNDERDOG_THRESHOLD}+)</span>
+            <span>📋 Max {MAX_PER_SEED_LINE} from any seed line</span>
+            <span>🔶 At least {MIN_HIGHER_SEEDS} players seeded {HIGHER_SEED_THRESHOLD}+ ({MIN_UNDERDOGS} must be DD)</span>
+            <span>🟣 At least {MIN_UNDERDOGS} double-digit seeds ({UNDERDOG_THRESHOLD}+)</span>
           </div>
         </div>
         <div className="flex gap-2">
@@ -290,6 +289,7 @@ export default function DraftMode() {
           <div className="text-4xl mb-2">🎉</div>
           <p className="font-bold text-lg">Draft Complete!</p>
           <p className="text-sm mt-1">All {TOTAL_PICKS} picks have been made. Good luck everyone!</p>
+          <p className="text-sm mt-1 text-green-600">Head to Admin → Lineups to set each drafter's starting 6.</p>
         </div>
       )}
 
@@ -308,21 +308,19 @@ export default function DraftMode() {
             </div>
             <div className="text-2xl font-bold text-slate-800">🏀 {onClockDrafter.name} is on the clock</div>
 
-            {/* Rule status */}
             <div className="mt-2 flex flex-wrap gap-3 text-xs">
               <span className={`font-medium ${onClockConstraints.higherSeedCount >= MIN_HIGHER_SEEDS ? 'text-green-600' : 'text-slate-500'}`}>
                 {onClockConstraints.higherSeedCount >= MIN_HIGHER_SEEDS ? '✓' : `${onClockConstraints.higherSeedCount}/${MIN_HIGHER_SEEDS}`} seed {HIGHER_SEED_THRESHOLD}+
               </span>
               <span className={`font-medium ${onClockConstraints.underdogCount >= MIN_UNDERDOGS ? 'text-green-600' : 'text-slate-500'}`}>
-                {onClockConstraints.underdogCount >= MIN_UNDERDOGS ? '✓' : `${onClockConstraints.underdogCount}/${MIN_UNDERDOGS}`} underdogs
+                {onClockConstraints.underdogCount >= MIN_UNDERDOGS ? '✓' : `${onClockConstraints.underdogCount}/${MIN_UNDERDOGS}`} double-digit
               </span>
               <span className="text-slate-400">{onClockConstraints.picksRemaining} pick(s) left</span>
             </div>
 
-            {/* Hard constraint warnings */}
             {onClockConstraints.mustPickUnderdog && (
               <div className="mt-2 text-sm font-semibold text-red-600">
-                🚨 Must pick an underdog (seed {UNDERDOG_THRESHOLD}+) — {onClockConstraints.underdogsNeeded} needed, {onClockConstraints.picksRemaining} pick(s) left
+                🚨 Must pick a double-digit seed ({UNDERDOG_THRESHOLD}+) — {onClockConstraints.underdogsNeeded} needed, {onClockConstraints.picksRemaining} pick(s) left
               </div>
             )}
             {!onClockConstraints.mustPickUnderdog && onClockConstraints.mustPickHigherSeed && (
@@ -330,6 +328,15 @@ export default function DraftMode() {
                 ⚠️ Must pick seed {HIGHER_SEED_THRESHOLD}+ — {onClockConstraints.higherSeedsNeeded} needed, {onClockConstraints.picksRemaining} pick(s) left
               </div>
             )}
+
+            {/* Seed lines at cap */}
+            {Object.entries(onClockConstraints.seedLineCounts)
+              .filter(([, count]) => count >= MAX_PER_SEED_LINE)
+              .map(([seed]) => (
+                <div key={seed} className="mt-1 text-xs text-red-500">
+                  ⛔ Seed {seed} line full ({MAX_PER_SEED_LINE}/{MAX_PER_SEED_LINE})
+                </div>
+              ))}
           </div>
 
           {/* Search */}
@@ -355,7 +362,7 @@ export default function DraftMode() {
                   filteredPlayers.slice(0, 20).map(p => {
                     const isUnderdog = p.seed >= UNDERDOG_THRESHOLD
                     const isHigherSeed = !isUnderdog && p.seed >= HIGHER_SEED_THRESHOLD
-                    const teamCount = onClockConstraints.teamCounts[p.team] || 0
+                    const seedCount = onClockConstraints.seedLineCounts[p.seed] || 0
                     const teamStyle = getTeamStyle(p.team)
                     return (
                       <button
@@ -371,18 +378,14 @@ export default function DraftMode() {
                             {p.seed ? `#${p.seed} ` : ''}{p.team}
                           </span>
                           {isUnderdog && (
-                            <span className="ml-1 text-xs bg-purple-100 text-purple-700 px-1 rounded font-semibold">
-                              Underdog
-                            </span>
+                            <span className="ml-1 text-xs bg-purple-100 text-purple-700 px-1 rounded font-semibold">DD</span>
                           )}
                           {isHigherSeed && (
-                            <span className="ml-1 text-xs bg-amber-100 text-amber-700 px-1 rounded font-semibold">
-                              Seed {p.seed}
-                            </span>
+                            <span className="ml-1 text-xs bg-amber-100 text-amber-700 px-1 rounded font-semibold">S{p.seed}</span>
                           )}
-                          {teamCount === MAX_FROM_SAME_TEAM - 1 && (
+                          {seedCount === MAX_PER_SEED_LINE - 1 && (
                             <span className="ml-1 text-xs bg-red-50 text-red-500 px-1 rounded">
-                              {teamCount}/{MAX_FROM_SAME_TEAM} from {p.team}
+                              {seedCount}/{MAX_PER_SEED_LINE} seed-{p.seed}s
                             </span>
                           )}
                         </div>
@@ -412,38 +415,27 @@ export default function DraftMode() {
           return (
             <div
               key={drafter.id}
-              className={`rounded-xl border p-3 ${
-                isOnClock
-                  ? 'border-orange-400 ring-2 ring-orange-200 bg-orange-50'
-                  : 'border-slate-200 bg-white'
-              }`}
+              className={`rounded-xl border p-3 ${isOnClock ? 'border-orange-400 ring-2 ring-orange-200 bg-orange-50' : 'border-slate-200 bg-white'}`}
             >
-              {/* Card header */}
-              <div className={`text-sm font-bold uppercase tracking-wide mb-2 truncate ${
-                isOnClock ? 'text-orange-600' : 'text-slate-600'
-              }`}>
+              <div className={`text-sm font-bold uppercase tracking-wide mb-2 truncate ${isOnClock ? 'text-orange-600' : 'text-slate-600'}`}>
                 {isOnClock && '🏀 '}{drafter.name}
               </div>
 
               {/* Rule badges */}
               <div className="flex flex-wrap gap-1 mb-2">
-                <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
-                  higherSeedOk ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
-                }`}>
+                <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${higherSeedOk ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
                   {cardConstraints.higherSeedCount}/{MIN_HIGHER_SEEDS} seed {HIGHER_SEED_THRESHOLD}+
                 </span>
-                <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
-                  underdogOk ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
-                }`}>
-                  {cardConstraints.underdogCount}/{MIN_UNDERDOGS} underdogs
+                <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${underdogOk ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                  {cardConstraints.underdogCount}/{MIN_UNDERDOGS} DD
                 </span>
               </div>
 
-              {/* Team cap warnings */}
-              {Object.entries(cardConstraints.teamCounts)
-                .filter(([, count]) => count >= MAX_FROM_SAME_TEAM)
-                .map(([team]) => (
-                  <div key={team} className="text-xs text-red-500 mb-1">⛔ {team} at cap ({MAX_FROM_SAME_TEAM})</div>
+              {/* Seed lines at cap */}
+              {Object.entries(cardConstraints.seedLineCounts)
+                .filter(([, count]) => count >= MAX_PER_SEED_LINE)
+                .map(([seed]) => (
+                  <div key={seed} className="text-xs text-red-500 mb-0.5">⛔ Seed {seed} line full</div>
                 ))}
 
               {/* Pick slots */}
@@ -463,15 +455,9 @@ export default function DraftMode() {
                       <span className="flex justify-between items-center gap-1">
                         <span className="truncate">{player.name.split(',')[0]}</span>
                         <span className="shrink-0 flex items-center gap-1">
-                          {isUnderdog && (
-                            <span className="text-xs bg-purple-100 text-purple-700 px-1 rounded font-semibold">UD</span>
-                          )}
-                          {isHigherSeed && (
-                            <span className="text-xs bg-amber-100 text-amber-700 px-1 rounded font-semibold">S{player.seed}</span>
-                          )}
-                          {player.seed && (
-                            <span className="opacity-50">#{player.seed}</span>
-                          )}
+                          {isUnderdog && <span className="text-xs bg-purple-100 text-purple-700 px-1 rounded">DD</span>}
+                          {isHigherSeed && <span className="text-xs bg-amber-100 text-amber-700 px-1 rounded">S{player.seed}</span>}
+                          {player.seed && <span className="opacity-50">#{player.seed}</span>}
                         </span>
                       </span>
                     ) : (
@@ -482,11 +468,7 @@ export default function DraftMode() {
               })}
 
               {rulesComplete && (
-                <div className={`mt-2 text-xs text-center font-semibold rounded py-0.5 ${
-                  higherSeedOk && underdogOk
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-red-100 text-red-600'
-                }`}>
+                <div className={`mt-2 text-xs text-center font-semibold rounded py-0.5 ${higherSeedOk && underdogOk ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
                   {higherSeedOk && underdogOk ? '✓ Rules satisfied' : '✗ Rules violated!'}
                 </div>
               )}
@@ -521,11 +503,7 @@ export default function DraftMode() {
                     return (
                       <td
                         key={pos}
-                        className={`px-4 py-1.5 text-center ${
-                          isCurrent ? 'bg-orange-100 text-orange-700 font-bold' :
-                          isMade ? 'text-slate-400 line-through' :
-                          'text-slate-600'
-                        }`}
+                        className={`px-4 py-1.5 text-center ${isCurrent ? 'bg-orange-100 text-orange-700 font-bold' : isMade ? 'text-slate-400 line-through' : 'text-slate-600'}`}
                       >
                         {drafter?.name || '?'}
                       </td>

@@ -1,31 +1,33 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase.js'
+import { computeAutoLineup, computePlayerTotal } from '../lib/lineup.js'
+import { getTeamStyle } from '../lib/teamColors.js'
 
-const ROUNDS = ['Play-In', 'Round of 64', 'Round of 32', 'Sweet Sixteen', 'Elite Eight', 'Final Four', 'Championship']
 const MEDALS = ['🥇', '🥈', '🥉']
 
-function computeTotal(player) {
-  return (player.player_scores || []).reduce((sum, s) => sum + (s.points || 0), 0)
-}
+function PlayerPill({ player, role }) {
+  const pts = computePlayerTotal(player)
+  const base = 'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border'
 
-function computeDrafterStats(drafter) {
-  const players = drafter.players || []
-  const totalPoints = players.reduce((sum, p) => sum + computeTotal(p), 0)
-  const playersLeft = players.filter(p => !p.is_eliminated).length
-  return { ...drafter, players, totalPoints, playersLeft }
-}
+  if (role === 'bench') {
+    return (
+      <span className={`${base} bg-slate-100 border-slate-200 text-slate-400`}>
+        {player.name.split(',')[0]}
+        <span className="opacity-60">{pts}</span>
+      </span>
+    )
+  }
 
-function PlayerPill({ player }) {
-  const pts = computeTotal(player)
+  const teamStyle = getTeamStyle(player.team)
+  const isSixthMan = role === 'sixth'
+
   return (
     <span
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border ${
-        player.is_eliminated
-          ? 'bg-slate-100 border-slate-200 text-slate-400 line-through'
-          : 'bg-blue-50 border-blue-200 text-blue-800'
-      }`}
+      className={`${base} ${player.is_eliminated ? 'opacity-50 line-through' : ''}`}
+      style={teamStyle ?? { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE', color: '#1E40AF' }}
     >
       {player.name.split(',')[0]}
+      {isSixthMan && <span className="ml-0.5 text-xs opacity-70">(6th)</span>}
       <span className="font-bold">{pts}</span>
     </span>
   )
@@ -44,7 +46,7 @@ export default function Standings() {
         .select(`
           id, name, draft_position,
           players (
-            id, name, team, is_eliminated,
+            id, name, team, seed, is_eliminated,
             player_scores (round_name, points)
           )
         `)
@@ -52,8 +54,27 @@ export default function Standings() {
 
       if (error) { setError(error.message); setLoading(false); return }
 
-      const enriched = (data || []).map(computeDrafterStats)
-      enriched.sort((a, b) => b.totalPoints - a.totalPoints)
+      const enriched = (data || []).map(drafter => {
+        const players = drafter.players || []
+        const { lineup, sixthMan, bench, lineupTotal, hasValidLineup } = computeAutoLineup(players)
+        const lineupIds  = new Set(lineup.map(p => p.id))
+        const sixthManId = sixthMan?.id
+        const playersLeft = lineup.filter(p => !p.is_eliminated).length
+
+        return {
+          ...drafter,
+          players,
+          lineup,
+          bench,
+          lineupIds,
+          sixthManId,
+          lineupTotal,
+          hasValidLineup,
+          playersLeft,
+        }
+      })
+
+      enriched.sort((a, b) => b.lineupTotal - a.lineupTotal)
       setStandings(enriched)
       setLoading(false)
     }
@@ -61,9 +82,9 @@ export default function Standings() {
   }, [])
 
   if (loading) return <div className="text-center py-16 text-slate-500">Loading standings...</div>
-  if (error) return <div className="text-center py-16 text-red-500">Error: {error}</div>
+  if (error)   return <div className="text-center py-16 text-red-500">Error: {error}</div>
 
-  if (standings.length === 0) {
+  if (standings.length === 0 || standings.every(d => d.players.length === 0)) {
     return (
       <div className="text-center py-16">
         <div className="text-5xl mb-4">🏀</div>
@@ -76,48 +97,83 @@ export default function Standings() {
   return (
     <div>
       <h2 className="text-2xl font-bold text-[#1e3a5f] mb-1">Standings</h2>
-      <p className="text-sm text-slate-500 mb-6">Total points scored by all drafted players across the tournament.</p>
+      <p className="text-sm text-slate-500 mb-1">
+        Score = best 6 players from each team (must include ≥1 double-digit seed + ≥1 other seed 5+).
+        Lowest scorer of the 6 = Sixth Man.
+      </p>
 
-      <div className="grid gap-4">
+      <div className="grid gap-4 mt-4">
         {standings.map((drafter, idx) => (
           <div
             key={drafter.id}
-            className={`bg-white rounded-xl shadow-sm border p-4 flex flex-col sm:flex-row sm:items-center gap-4 ${
+            className={`bg-white rounded-xl shadow-sm border p-4 ${
               idx === 0 ? 'border-yellow-400 ring-2 ring-yellow-200' : 'border-slate-200'
             }`}
           >
-            {/* Rank + Name */}
-            <div className="flex items-center gap-3 sm:w-48 shrink-0">
+            {/* Top row: rank, name, score */}
+            <div className="flex items-center gap-3 mb-3 flex-wrap">
               <span className="text-2xl">{MEDALS[idx] || `#${idx + 1}`}</span>
-              <div>
+              <div className="flex-1">
                 <div className="font-bold text-lg text-slate-800">{drafter.name}</div>
                 <div className="text-xs text-slate-400">
-                  {drafter.playersLeft}/{drafter.players.length} players active
+                  {drafter.playersLeft}/{drafter.lineup.length} lineup players still active
                 </div>
+              </div>
+              <div className="text-right">
+                <div className="text-3xl font-bold text-orange-500">{drafter.lineupTotal}</div>
+                <div className="text-xs text-slate-400 uppercase tracking-wide">lineup pts</div>
               </div>
             </div>
 
-            {/* Total Points */}
-            <div className="text-center sm:w-24 shrink-0">
-              <div className="text-3xl font-bold text-orange-500">{drafter.totalPoints}</div>
-              <div className="text-xs text-slate-400 uppercase tracking-wide">pts</div>
-            </div>
+            {!drafter.hasValidLineup && drafter.players.length > 0 && (
+              <div className="mb-2 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                ⚠️ No valid 6-player lineup found — showing top 6 scorers without rule enforcement.
+              </div>
+            )}
 
-            {/* Player pills */}
-            <div className="flex flex-wrap gap-2 flex-1">
-              {drafter.players.length === 0 ? (
-                <span className="text-slate-400 text-sm italic">No players drafted</span>
-              ) : (
-                drafter.players.map(p => <PlayerPill key={p.id} player={p} />)
-              )}
-            </div>
+            {/* Scoring lineup */}
+            {drafter.lineup.length > 0 && (
+              <div className="mb-2">
+                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
+                  Scoring Lineup
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {drafter.lineup.map(p => (
+                    <PlayerPill
+                      key={p.id}
+                      player={p}
+                      role={p.id === drafter.sixthManId ? 'sixth' : 'starter'}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Bench */}
+            {drafter.bench.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
+                  Bench
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {drafter.bench.map(p => (
+                    <PlayerPill key={p.id} player={p} role="bench" />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {drafter.players.length === 0 && (
+              <span className="text-slate-400 text-sm italic">No players drafted</span>
+            )}
           </div>
         ))}
       </div>
 
       <div className="mt-6 p-3 bg-blue-50 rounded-lg border border-blue-200 text-xs text-blue-700">
-        <strong>Pill key:</strong> player name + their total tournament points. 
-        Grayed out = eliminated. Still active = blue.
+        <strong>Lineup key:</strong> Colored = scoring lineup (team colors) &nbsp;|&nbsp;
+        <strong>(6th)</strong> = Sixth Man (lowest scorer in lineup) &nbsp;|&nbsp;
+        Gray = bench (not counted in score)
       </div>
     </div>
   )
