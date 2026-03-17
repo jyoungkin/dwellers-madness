@@ -373,7 +373,7 @@ export default function DraftMode() {
                         style={teamStyle}
                       >
                         <div>
-                          <span className="font-medium text-slate-800">{p.name}</span>
+                          <span className="font-medium">{p.name}</span>
                           <span className="text-xs text-slate-500 ml-2">
                             {p.seed ? `#${p.seed} ` : ''}{p.team}
                           </span>
@@ -448,7 +448,7 @@ export default function DraftMode() {
                 return (
                   <div
                     key={slotIdx}
-                    className={`text-xs rounded px-2 py-1 mb-1 ${player ? 'font-medium text-slate-800' : 'border border-slate-200 bg-slate-50 text-slate-300 italic'}`}
+                    className={`text-xs rounded px-2 py-1 mb-1 ${player ? 'font-medium' : 'border border-slate-200 bg-slate-50 text-slate-300 italic'}`}
                     style={teamStyle}
                   >
                     {player ? (

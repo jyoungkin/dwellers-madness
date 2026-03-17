@@ -1,103 +1,121 @@
 /**
- * NCAA Tournament team primary colors — sourced from teamcolorcodes.com
+ * NCAA Tournament team primary + secondary colors — sourced from teamcolorcodes.com
  * Keys match the exact team names produced by fetch_real_bracket.py / fetch_players.py.
+ * Secondary is used for player text color.
  *
  * Usage:
  *   import { getTeamStyle } from './teamColors.js'
  *   <div style={getTeamStyle(player.team)}>...</div>
  */
 
+// { primary, secondary } — secondary used for text
 export const TEAM_COLORS = {
   // ── East Region ────────────────────────────────────────────────────────────
-  "Duke":                  "#003087", // Duke Blue        (teamcolorcodes.com)
-  "Connecticut":           "#000E2F", // UConn Navy
-  "Michigan State":        "#18453B", // Spartan Green
-  "Kansas":                "#0051BA", // KU Blue          (teamcolorcodes.com)
-  "St. John's (NY)":       "#BA0C2F", // Red Storm Red    (teamcolorcodes.com)
-  "Louisville":            "#AD0000", // Cardinal Red     (teamcolorcodes.com)
-  "UCLA":                  "#2D68C4", // Bruin Blue       (teamcolorcodes.com)
-  "Ohio State":            "#BB0000", // Scarlet          (teamcolorcodes.com)
-  "TCU":                   "#4D1979", // Horned Frog Purple
-  "UCF":                   "#B59A0C", // UCF Gold
-  "South Florida":         "#006747", // USF Green
-  "Northern Iowa":         "#4B116F", // UNI Purple
-  "California Baptist":    "#002868", // CBU Royal Blue
-  "North Dakota State":    "#0A5640", // NDSU Green
-  "Furman":                "#582C83", // Furman Purple
-  "Siena":                 "#006633", // Siena Green
+  "Duke":                  { primary: "#003087", secondary: "#FFFFFF" },
+  "Connecticut":           { primary: "#000E2F", secondary: "#FFFFFF" },
+  "Michigan State":        { primary: "#18453B", secondary: "#FFFFFF" },
+  "Michigan St":           { primary: "#18453B", secondary: "#FFFFFF" },
+  "Kansas":                { primary: "#0051BA", secondary: "#E8000D" },
+  "St. John's (NY)":       { primary: "#BA0C2F", secondary: "#FFFFFF" },
+  "St John's":             { primary: "#BA0C2F", secondary: "#FFFFFF" },
+  "St. John's":            { primary: "#BA0C2F", secondary: "#FFFFFF" },
+  "Louisville":            { primary: "#AD0000", secondary: "#FFFFFF" },
+  "UCLA":                  { primary: "#2D68C4", secondary: "#FFFFFF" },
+  "Ohio State":            { primary: "#BB0000", secondary: "#666666" },
+  "TCU":                   { primary: "#4D1979", secondary: "#FFFFFF" },
+  "UCF":                   { primary: "#B59A0C", secondary: "#000000" },
+  "South Florida":         { primary: "#006747", secondary: "#FFFFFF" },
+  "Northern Iowa":         { primary: "#4B116F", secondary: "#FFFFFF" },
+  "California Baptist":    { primary: "#002868", secondary: "#FFFFFF" },
+  "CA Baptist":            { primary: "#002868", secondary: "#FFFFFF" },
+  "North Dakota State":    { primary: "#0A5640", secondary: "#FFFFFF" },
+  "N Dakota St":           { primary: "#0A5640", secondary: "#FFFFFF" },
+  "Furman":                { primary: "#582C83", secondary: "#FFFFFF" },
+  "Siena":                 { primary: "#006633", secondary: "#FFFFFF" },
 
   // ── South Region ───────────────────────────────────────────────────────────
-  "Florida":               "#0021A5", // Florida Blue     (teamcolorcodes.com)
-  "Houston":               "#C8102E", // Cougar Red       (teamcolorcodes.com)
-  "Illinois":              "#E84A27", // Chief Orange
-  "Nebraska":              "#E41C38", // Husker Scarlet
-  "Vanderbilt":            "#866D4B", // Commodore Gold
-  "North Carolina":        "#4B9CD3", // Carolina Blue
-  "Saint Mary's":          "#013087", // Gaels Blue
-  "Clemson":               "#F66733", // Tiger Orange
-  "Iowa":                  "#FFCD00", // Hawkeye Gold
-  "Texas A&M":             "#500000", // Aggie Maroon
-  "Virginia Commonwealth": "#C5B358", // VCU Gold
-  "McNeese State":         "#003087", // Cowboys Blue
-  "Troy":                  "#8B2346", // Troy Maroon
-  "Pennsylvania":          "#011F5B", // Penn Blue
-  "Idaho":                 "#D2001A", // Vandal Cardinal
-  "Lehigh":                "#653018", // Mountain Hawk Brown
+  "Florida":               { primary: "#0021A5", secondary: "#FFFFFF" },
+  "Houston":               { primary: "#C8102E", secondary: "#FFFFFF" },
+  "Illinois":              { primary: "#E84A27", secondary: "#000000" },
+  "Nebraska":              { primary: "#E41C38", secondary: "#FFFFFF" },
+  "Vanderbilt":            { primary: "#866D4B", secondary: "#FFFFFF" },
+  "North Carolina":        { primary: "#4B9CD3", secondary: "#FFFFFF" },
+  "Saint Mary's":          { primary: "#013087", secondary: "#FFFFFF" },
+  "Clemson":               { primary: "#F66733", secondary: "#522D80" },
+  "Iowa":                  { primary: "#FFCD00", secondary: "#000000" },
+  "Texas A&M":             { primary: "#500000", secondary: "#FFFFFF" },
+  "Virginia Commonwealth": { primary: "#C5B358", secondary: "#000000" },
+  "McNeese State":         { primary: "#003087", secondary: "#FFFFFF" },
+  "Troy":                  { primary: "#8B2346", secondary: "#FFFFFF" },
+  "Pennsylvania":          { primary: "#011F5B", secondary: "#FFFFFF" },
+  "Penn":                  { primary: "#011F5B", secondary: "#FFFFFF" },
+  "Idaho":                 { primary: "#D2001A", secondary: "#FFFFFF" },
+  "Lehigh":                { primary: "#653018", secondary: "#FFFFFF" },
 
   // ── West Region ────────────────────────────────────────────────────────────
-  "Arizona":               "#CC0033", // Wildcat Cardinal (teamcolorcodes.com)
-  "Purdue":                "#CFB991", // Boilermaker Gold
-  "Gonzaga":               "#002469", // Bulldog Blue
-  "Arkansas":              "#9D2235", // Razorback Red
-  "Wisconsin":             "#C5050C", // Badger Red
-  "Brigham Young":         "#002E5D", // BYU Navy
-  "Miami (FL)":            "#005030", // Hurricane Green
-  "Villanova":             "#00205B", // Wildcat Navy
-  "Utah State":            "#0F2439", // Aggie Navy
-  "Missouri":              "#F1B82D", // Mizzou Gold
-  "NC State":              "#CC0000", // Wolfpack Red
-  "High Point":            "#5C068C", // Panther Purple
-  "Hawaii":                "#024731", // Rainbow Warrior Green
-  "Kennesaw State":        "#FDBB30", // Owl Gold
-  "Queens (NC)":           "#7B0015", // Royals Maroon
-  "Long Island University":"#002868", // Sharks Blue
+  "Arizona":               { primary: "#CC0033", secondary: "#FFFFFF" },
+  "Purdue":                { primary: "#CFB991", secondary: "#000000" },
+  "Gonzaga":               { primary: "#002469", secondary: "#FFFFFF" },
+  "Arkansas":              { primary: "#9D2235", secondary: "#FFFFFF" },
+  "Wisconsin":             { primary: "#C5050C", secondary: "#FFFFFF" },
+  "Brigham Young":         { primary: "#002E5D", secondary: "#FFFFFF" },
+  "Miami (FL)":            { primary: "#005030", secondary: "#FFFFFF" },
+  "Villanova":             { primary: "#00205B", secondary: "#FFFFFF" },
+  "Utah State":            { primary: "#0F2439", secondary: "#FFFFFF" },
+  "Missouri":              { primary: "#F1B82D", secondary: "#000000" },
+  "NC State":              { primary: "#CC0000", secondary: "#FFFFFF" },
+  "Texas":                 { primary: "#BF5700", secondary: "#FFFFFF" },
+  "High Point":            { primary: "#5C068C", secondary: "#FFFFFF" },
+  "Hawaii":                { primary: "#024731", secondary: "#FFFFFF" },
+  "Kennesaw State":        { primary: "#FDBB30", secondary: "#000000" },
+  "Kennesaw St":           { primary: "#FDBB30", secondary: "#000000" },
+  "Queens (NC)":           { primary: "#7B0015", secondary: "#FFFFFF" },
+  "Queens":                { primary: "#7B0015", secondary: "#FFFFFF" },
+  "Long Island University":{ primary: "#002868", secondary: "#FFFFFF" },
+  "Long Island":           { primary: "#002868", secondary: "#FFFFFF" },
+  "Miami OH":              { primary: "#B61E2E", secondary: "#FFFFFF" },
 
   // ── Midwest Region ─────────────────────────────────────────────────────────
-  "Michigan":              "#00274C", // Wolverine Blue   (teamcolorcodes.com)
-  "Iowa State":            "#C8102E", // Cyclone Cardinal
-  "Virginia":              "#232D4B", // Cavalier Navy
-  "Alabama":               "#9E1B32", // Crimson Tide
-  "Texas Tech":            "#CC0000", // Red Raider Scarlet
-  "Tennessee":             "#FF8200", // Vol Orange       (teamcolorcodes.com)
-  "Kentucky":              "#0033A0", // Wildcat Blue     (teamcolorcodes.com)
-  "Georgia":               "#BA0C2F", // Bulldog Red
-  "Saint Louis":           "#003DA5", // Billikens Blue
-  "Santa Clara":           "#862633", // Bronco Maroon
-  "SMU":                   "#354CA1", // Mustang Blue
-  "Akron":                 "#002147", // Zip Navy
-  "Hofstra":               "#003087", // Pride Blue
-  "Wright State":          "#00573F", // Raiders Green
-  "Tennessee State":       "#4E2683", // Tiger Purple
-  "Howard":                "#003A63", // Bison Blue
+  "Michigan":              { primary: "#00274C", secondary: "#FFCB05" },
+  "Iowa State":            { primary: "#C8102E", secondary: "#F1B82D" },
+  "Virginia":              { primary: "#232D4B", secondary: "#FFFFFF" },
+  "Alabama":               { primary: "#9E1B32", secondary: "#FFFFFF" },
+  "Texas Tech":            { primary: "#CC0000", secondary: "#000000" },
+  "Tennessee":             { primary: "#FF8200", secondary: "#FFFFFF" },
+  "Kentucky":              { primary: "#0033A0", secondary: "#FFFFFF" },
+  "Georgia":               { primary: "#BA0C2F", secondary: "#000000" },
+  "Saint Louis":           { primary: "#003DA5", secondary: "#FFFFFF" },
+  "Santa Clara":           { primary: "#862633", secondary: "#FFFFFF" },
+  "SMU":                   { primary: "#354CA1", secondary: "#FFFFFF" },
+  "Akron":                 { primary: "#002147", secondary: "#FFFFFF" },
+  "Hofstra":               { primary: "#003087", secondary: "#FFFFFF" },
+  "Wright State":          { primary: "#00573F", secondary: "#FFFFFF" },
+  "Wright St":             { primary: "#00573F", secondary: "#FFFFFF" },
+  "Tennessee State":       { primary: "#4E2683", secondary: "#FFFFFF" },
+  "Tennessee St":          { primary: "#4E2683", secondary: "#FFFFFF" },
+  "Howard":                { primary: "#003A63", secondary: "#E51937" },
+  "UMBC":                  { primary: "#FFC20E", secondary: "#000000" },
+  "Prairie View":          { primary: "#582C83", secondary: "#EAAA00" },
+  "Prairie View A&M":      { primary: "#582C83", secondary: "#EAAA00" },
 }
 
 /**
- * Returns an inline style object applying the team's primary color as:
- *   - a subtle tinted background (~8% opacity)
- *   - a solid 3px left-border accent
- *   - muted borders on the other three sides
+ * Returns an inline style object applying the team's primary color as background/border
+ * and secondary color as text color.
  *
  * Falls back to undefined (no inline style) if the team has no entry.
  */
 export function getTeamStyle(team) {
-  const color = TEAM_COLORS[team]
-  if (!color) return undefined
+  const colors = TEAM_COLORS[team]
+  if (!colors) return undefined
+  const { primary, secondary } = typeof colors === 'string' ? { primary: colors, secondary: '#1e293b' } : colors
   return {
-    backgroundColor: color + "14", // 8% opacity fill
-    borderLeft:      `3px solid ${color}`,
-    borderTop:       `1px solid ${color}40`,
-    borderRight:     `1px solid ${color}40`,
-    borderBottom:    `1px solid ${color}40`,
+    backgroundColor: primary + "14",
+    borderLeft:      `3px solid ${primary}`,
+    borderTop:       `1px solid ${primary}40`,
+    borderRight:    `1px solid ${primary}40`,
+    borderBottom:   `1px solid ${primary}40`,
+    color:          secondary,
   }
 }
 
@@ -105,9 +123,10 @@ export function getTeamStyle(team) {
  * Returns a lighter hover-state variant of the team style (for interactive elements).
  */
 export function getTeamHoverStyle(team) {
-  const color = TEAM_COLORS[team]
-  if (!color) return undefined
+  const colors = TEAM_COLORS[team]
+  if (!colors) return undefined
+  const primary = typeof colors === 'string' ? colors : colors.primary
   return {
-    backgroundColor: color + "25", // ~15% opacity on hover
+    backgroundColor: primary + "25",
   }
 }
