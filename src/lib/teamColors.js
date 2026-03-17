@@ -100,22 +100,22 @@ export const TEAM_COLORS = {
 }
 
 /**
- * Returns an inline style object applying the team's primary color as background/border
- * and secondary color as text color.
+ * Returns an inline style object applying the team's primary color as background/border.
+ * Text color is always dark slate for readability (many teams use white as secondary).
  *
  * Falls back to undefined (no inline style) if the team has no entry.
  */
 export function getTeamStyle(team) {
   const colors = TEAM_COLORS[team]
   if (!colors) return undefined
-  const { primary, secondary } = typeof colors === 'string' ? { primary: colors, secondary: '#1e293b' } : colors
+  const primary = typeof colors === 'string' ? colors : colors.primary
   return {
     backgroundColor: primary + "14",
     borderLeft:      `3px solid ${primary}`,
     borderTop:       `1px solid ${primary}40`,
     borderRight:    `1px solid ${primary}40`,
     borderBottom:   `1px solid ${primary}40`,
-    color:          secondary,
+    color:          '#1e293b',
   }
 }
 
