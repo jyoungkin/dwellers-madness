@@ -187,9 +187,9 @@ def main():
     print("=" * 60)
 
     # Collect events across all first-round days
-    # First Four: March 18-19, First Round: March 20-21
+    # First Four: March 17-18 (Texas/NC State, Howard/UMBC on 17th), First Round: March 20-21
     all_events = []
-    for date in ["20260318", "20260319", "20260320", "20260321"]:
+    for date in ["20260317", "20260318", "20260319", "20260320", "20260321"]:
         evs = fetch_events_for_date(date)
         print(f"  {date}: {len(evs)} events")
         all_events.extend(evs)

@@ -8,7 +8,7 @@ if (-not (Test-Path $VENV_PYTHON)) {
 }
 
 Write-Host ""
-Write-Host "Step 1 of 3 - Fetch real bracket from ESPN" -ForegroundColor Cyan
+Write-Host "Step 1 of 3 - Fetch real bracket from ESPN (incl. First Four March 17-18)" -ForegroundColor Cyan
 Push-Location $PREDICTOR_DIR
 & $VENV_PYTHON fetch_real_bracket.py
 Pop-Location

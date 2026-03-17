@@ -157,7 +157,25 @@ def main():
             sys.exit(1)
 
     seed_map = load_seed_map(BRACKET_FILE)
-    print(f"\nBracket loaded: {len(seed_map)} teams")
+    print(f"\nBracket loaded: {len(seed_map)} teams (expect 68: 60 main + 8 First Four)")
+
+    # Load first_four from bracket for verification
+    with open(BRACKET_FILE) as f:
+        bracket = json.load(f)
+    first_four_teams = []
+    for game in bracket.get("first_four", []):
+        s = game.get("seed", 0)
+        for t in game.get("teams", []):
+            name = t.get("name", "")
+            if name:
+                first_four_teams.append((name, s))
+    if first_four_teams:
+        print(f"  First Four ({len(first_four_teams)} teams):")
+        for name, s in first_four_teams:
+            print(f"    #{s:2d} {name}")
+    else:
+        print("  ⚠ No First Four teams in bracket — run full run_seed.ps1 (not run_seed_data_only)")
+
     for seed in sorted(set(seed_map.values())):
         teams = [t for t, s in seed_map.items() if s == seed]
         print(f"  Seed {seed:2d}: {', '.join(teams)}")
@@ -168,6 +186,8 @@ def main():
     # Quick verification: teams in pool
     teams_in_pool = sorted(set(r["team"] for r in rows))
     print(f"Teams in pool: {len(teams_in_pool)}")
+    if len(teams_in_pool) < 68:
+        print(f"  ⚠ Expected 68 teams (60 main + 8 First Four). Re-run full run_seed.ps1 to fetch March 17 bracket.")
     st_johns = [r for r in rows if "st" in r["team"].lower() and "john" in r["team"].lower()]
     if st_johns:
         print(f"  ✓ St. John's: {len(st_johns)} players")
