@@ -23,7 +23,7 @@ export default function Layout() {
       <header className="bg-[#1e3a5f] text-white shadow-lg">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-xl font-bold tracking-tight">🏀 HFF March Madness</h1>
+            <h1 className="text-xl font-bold tracking-tight">🏀 Dwellers Madness</h1>
             <p className="text-xs text-slate-300 mt-0.5">Player Draft League</p>
           </div>
           <nav className="flex gap-1 flex-wrap">

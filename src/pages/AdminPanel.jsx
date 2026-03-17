@@ -44,8 +44,8 @@ function DraftersTab() {
             className="border border-slate-300 rounded-lg px-3 py-2 text-sm w-40" required />
         </div>
         <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">Draft Position (1–8)</label>
-          <input type="number" min="1" max="8" value={pos} onChange={e => setPos(e.target.value)}
+          <label className="block text-xs font-medium text-slate-600 mb-1">Draft Position (1–3)</label>
+          <input type="number" min="1" max="3" value={pos} onChange={e => setPos(e.target.value)}
             className="border border-slate-300 rounded-lg px-3 py-2 text-sm w-20" required />
         </div>
         <button disabled={saving} className="bg-[#1e3a5f] text-white px-4 py-2 rounded-lg text-sm hover:bg-[#2d4a7a] disabled:opacity-50">
@@ -77,7 +77,7 @@ function DraftersTab() {
           )}
         </tbody>
       </table>
-      <p className="text-xs text-slate-400">Add all 8 drafters before starting the draft. Draft position determines snake order.</p>
+      <p className="text-xs text-slate-400">Add all 3 drafters before starting the draft. Draft position (1–3) determines snake order.</p>
     </div>
   )
 }
