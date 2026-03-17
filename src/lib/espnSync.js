@@ -152,20 +152,19 @@ export async function syncTournamentScores(onProgress) {
   }
 
   const espnNames = Object.keys(allStats)
-  onProgress?.(`Found stats for ${espnNames.length} players. Matching to your draft...`)
+  onProgress?.(`Found stats for ${espnNames.length} players. Matching to all players...`)
 
-  // Get all drafted players
-  const { data: draftedPlayers, error } = await supabase
+  // Get ALL players (sync scores for everyone so Tournament Leaders page works)
+  const { data: allPlayers, error } = await supabase
     .from('players')
-    .select('id, name')
-    .not('drafter_id', 'is', null)
+    .select('id, name, drafter_id')
 
   if (error) throw new Error('Failed to fetch players from DB: ' + error.message)
 
   const matched = []
   const unmatched = []
 
-  for (const player of draftedPlayers) {
+  for (const player of allPlayers || []) {
     const espnName = findBestNameMatch(player.name, espnNames)
 
     if (espnName) {
@@ -177,7 +176,7 @@ export async function syncTournamentScores(onProgress) {
         )
       }
       matched.push({ ourName: player.name, espnName })
-    } else {
+    } else if (player.drafter_id) {
       unmatched.push(player.name)
     }
   }

@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/Layout.jsx'
 import Standings from './pages/Standings.jsx'
 import PlayerScores from './pages/PlayerScores.jsx'
+import TournamentLeaders from './pages/TournamentLeaders.jsx'
 import AdminPanel from './pages/AdminPanel.jsx'
 import DraftMode from './pages/DraftMode.jsx'
 import NotFound from './pages/NotFound.jsx'
@@ -19,6 +20,7 @@ export default function App() {
       <Route path="/" element={<Layout />}>
         <Route index element={<Standings />} />
         <Route path="scores" element={<PlayerScores />} />
+        <Route path="leaders" element={<TournamentLeaders />} />
         <Route path={`admin/${ADMIN_SLUG}`} element={<AdminRoute element={<AdminPanel />} />} />
         <Route path={`draft/${ADMIN_SLUG}`} element={<AdminRoute element={<DraftMode />} />} />
         <Route path="*" element={<NotFound />} />
