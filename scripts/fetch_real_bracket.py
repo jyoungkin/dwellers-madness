@@ -57,7 +57,7 @@ ESPN_NAME_FIX = {
 def fix_name(name):
     return ESPN_NAME_FIX.get(name, name)
 
-def _finalize(regions):
+def _finalize(regions, first_four=None):
     result = {}
     for region_name, seed_map in regions.items():
         ordered = []
@@ -69,7 +69,7 @@ def _finalize(regions):
     return {
         "regions": result,
         "final_four_matchups": [[rlist[0], rlist[1]], [rlist[2], rlist[3]]],
-        "first_four": [],
+        "first_four": first_four or [],
     }
 
 
@@ -90,18 +90,26 @@ def extract_bracket_from_events(events):
     
     Region name lives in:  competitions[0].notes[].headline
     e.g. "NCAA Men's Basketball Championship - East Region - 1st Round"
+    
+    First Four games (headline contains "First Four") are extracted separately:
+    we collect all 8 play-in teams with their ESPN IDs for the player pool,
+    but leave TBD in the main bracket (winner not yet determined).
     """
     region_seeds = {}
+    first_four = []  # [{"seed": 16, "teams": [{"name": "...", "espn_id": "..."}, ...]}, ...]
     KNOWN_REGIONS = {"East", "West", "South", "Midwest"}
 
     for ev in events:
         competition = ev.get("competitions", [{}])[0] if ev.get("competitions") else {}
 
-        # Parse region from notes headline
+        # Parse region and First Four flag from notes headline
         region = ""
+        is_first_four = False
         notes = competition.get("notes", [])
         for note in notes:
             headline = note.get("headline", "")
+            if "first four" in headline.lower():
+                is_first_four = True
             for rname in KNOWN_REGIONS:
                 if rname.lower() in headline.lower():
                     region = rname
@@ -110,13 +118,33 @@ def extract_bracket_from_events(events):
                 break
 
         if not region:
-            continue  # skip First Four play-in games with no region label
+            continue  # skip events with no region label
 
         competitors = competition.get("competitors", [])
+        if is_first_four:
+            # First Four: collect BOTH teams with ESPN IDs; don't overwrite region_seeds
+            teams_in_game = []
+            for comp in competitors:
+                seed = comp.get("curatedRank", {}).get("current") or comp.get("seed")
+                team = comp.get("team", {})
+                name = team.get("shortDisplayName") or team.get("displayName", "")
+                espn_id = team.get("id", "")
+                if seed and name and espn_id:
+                    try:
+                        s = int(seed)
+                        if 1 <= s <= 16:
+                            teams_in_game.append({"name": fix_name(name), "espn_id": str(espn_id)})
+                    except (ValueError, TypeError):
+                        pass
+            if teams_in_game:
+                s = int(competitors[0].get("curatedRank", {}).get("current") or competitors[0].get("seed") or 0)
+                first_four.append({"seed": s, "teams": teams_in_game})
+            continue
+
+        # Regular region game
         for comp in competitors:
             seed = comp.get("curatedRank", {}).get("current") or comp.get("seed")
             team = comp.get("team", {})
-            # Use shortDisplayName (e.g. "Duke") not displayName ("Duke Blue Devils")
             name = team.get("shortDisplayName") or team.get("displayName", "")
 
             if seed and name:
@@ -129,7 +157,7 @@ def extract_bracket_from_events(events):
                 except (ValueError, TypeError):
                     pass
 
-    return region_seeds
+    return region_seeds, first_four
 
 
 def debug_one_event(events):
@@ -159,9 +187,9 @@ def main():
     print("=" * 60)
 
     # Collect events across all first-round days
-    # First Four: March 19-20, First Round: March 20-21
+    # First Four: March 18-19, First Round: March 20-21
     all_events = []
-    for date in ["20260319", "20260320", "20260321"]:
+    for date in ["20260318", "20260319", "20260320", "20260321"]:
         evs = fetch_events_for_date(date)
         print(f"  {date}: {len(evs)} events")
         all_events.extend(evs)
@@ -172,13 +200,18 @@ def main():
 
     debug_one_event(all_events)
 
-    region_seeds = extract_bracket_from_events(all_events)
+    region_seeds, first_four = extract_bracket_from_events(all_events)
     print(f"\n  Regions extracted: {list(region_seeds.keys())}")
     for rn, sm in sorted(region_seeds.items()):
         seeds_found = sorted(sm.keys())
         print(f"    {rn}: seeds {seeds_found}")
         for seed, team in sorted(sm.items()):
             print(f"      ({seed:2d}) {team}")
+    if first_four:
+        print(f"\n  First Four: {len(first_four)} games")
+        for game in first_four:
+            names = [t["name"] for t in game["teams"]]
+            print(f"    Seed {game['seed']}: {' vs '.join(names)}")
 
     if len(region_seeds) != 4:
         # Show raw data for debugging
@@ -188,7 +221,7 @@ def main():
             print(json.dumps(all_events[0], indent=2)[:2000])
         sys.exit(1)
 
-    bracket = _finalize(region_seeds)
+    bracket = _finalize(region_seeds, first_four)
     with open(BRACKET_FILE, "w") as f:
         json.dump(bracket, f, indent=2)
     print(f"\nSaved real bracket -> {BRACKET_FILE}")

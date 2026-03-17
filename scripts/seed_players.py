@@ -72,8 +72,8 @@ def validate_env():
 def load_seed_map(bracket_path: Path) -> dict[str, int]:
     """Build {team_name: seed} from bracket_2026.json.
 
-    First Four teams are already excluded — fetch_real_bracket.py only
-    captures games that carry a region label (First Four play-ins don't).
+    Includes First Four play-in teams (from bracket['first_four']) so they
+    appear in the player pool with their seed (16 or 11).
     """
     with open(bracket_path) as f:
         bracket = json.load(f)
@@ -85,6 +85,14 @@ def load_seed_map(bracket_path: Path) -> dict[str, int]:
             seed = entry["seed"]
             if not str(team).startswith("TBD"):
                 seed_map[team] = int(seed)
+
+    # Add First Four teams (all 8 play-in teams get their seed)
+    for game in bracket.get("first_four", []):
+        s = int(game.get("seed", 0))
+        for t in game.get("teams", []):
+            name = t.get("name", "")
+            if name and s:
+                seed_map[name] = s
 
     return seed_map
 
@@ -156,6 +164,15 @@ def main():
 
     rows = load_players(PLAYERS_FILE, seed_map)
     print(f"\nPlayers to upload (PPG ≥ {MIN_PPG}): {len(rows)}")
+
+    # Quick verification: teams in pool
+    teams_in_pool = sorted(set(r["team"] for r in rows))
+    print(f"Teams in pool: {len(teams_in_pool)}")
+    st_johns = [r for r in rows if "st" in r["team"].lower() and "john" in r["team"].lower()]
+    if st_johns:
+        print(f"  ✓ St. John's: {len(st_johns)} players")
+    else:
+        print("  ⚠ St. John's: 0 players (check name mapping if expected)")
 
     if not rows:
         print("No players found. Lower MIN_PPG or check your CSV/bracket files.")

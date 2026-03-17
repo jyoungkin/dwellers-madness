@@ -18,8 +18,14 @@ const LINEUP_MIN_HIGHER = 2   // ≥2 players seeded 5+ in the lineup (DD counts
 const DD_THRESHOLD      = 10
 const HIGHER_THRESHOLD  = 5
 
+/** Rounds that count toward scoring. Play-In (First Four) is excluded. */
+const SCORING_ROUNDS = new Set(['Round of 64', 'Round of 32', 'Sweet Sixteen', 'Elite Eight', 'Final Four', 'Championship'])
+
 export function computePlayerTotal(player) {
-  return (player.player_scores || []).reduce((sum, s) => sum + (s.points || 0), 0)
+  return (player.player_scores || []).reduce((sum, s) => {
+    if (!SCORING_ROUNDS.has(s.round_name)) return sum
+    return sum + (s.points || 0)
+  }, 0)
 }
 
 function combinations(arr, k) {

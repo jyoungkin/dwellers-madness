@@ -51,8 +51,11 @@ TEAM_TO_ESPN_ID: dict[str, str] = {
     "Duke":                  "150",
     "Connecticut":           "41",
     "Michigan State":        "127",
+    "Michigan St":           "127",    # bracket variant
     "Kansas":                "2305",
     "St. John's (NY)":       "2599",
+    "St John's":             "2599",   # bracket variant (no period)
+    "St. John's":            "2599",
     "Louisville":            "97",
     "UCLA":                  "26",
     "Ohio State":            "194",
@@ -61,7 +64,9 @@ TEAM_TO_ESPN_ID: dict[str, str] = {
     "South Florida":         "58",
     "Northern Iowa":         "2460",
     "California Baptist":    "2856",
+    "CA Baptist":            "2856",   # bracket variant
     "North Dakota State":    "2449",
+    "N Dakota St":           "2449",   # bracket variant
     "Furman":                "231",
     "Siena":                 "2561",
     # South Region
@@ -204,10 +209,22 @@ def fetch_players(bracket_path: Path, year: int = 2026,
     with open(bracket_path) as f:
         bracket = json.load(f)
 
+    # Region teams (exclude TBD placeholders)
     tournament_teams: list[str] = []
     for region_teams in bracket["regions"].values():
         for t in region_teams:
-            tournament_teams.append(t["team"])
+            team_name = t["team"]
+            if not str(team_name).startswith("TBD"):
+                tournament_teams.append(team_name)
+
+    # First Four play-in teams (with ESPN IDs from API)
+    first_four_teams: list[tuple[str, str]] = []  # (team_name, espn_id)
+    for game in bracket.get("first_four", []):
+        for t in game.get("teams", []):
+            name = t.get("name", "")
+            espn_id = t.get("espn_id", "")
+            if name and espn_id:
+                first_four_teams.append((name, espn_id))
 
     # ---- Resumable partial cache -----------------------------------------
     partial_cache = DATA_DIR / "player_stats_partial.csv"
@@ -220,25 +237,33 @@ def fetch_players(bracket_path: Path, year: int = 2026,
         already_done = set()
         all_players = []
 
-    teams_to_fetch = [t for t in tournament_teams if t not in already_done]
-    print(f"[players] Fetching ESPN stats for {len(teams_to_fetch)} remaining teams ...")
-
+    # Build fetch list: (team_name, espn_id) for each team to fetch
+    to_fetch: list[tuple[str, str]] = []
     failed: list[str] = []
-    for i, team in enumerate(teams_to_fetch):
-        espn_id = TEAM_TO_ESPN_ID.get(team)
-        if not espn_id:
-            failed.append(team)
-            print(f"  [{i+1:2d}/{len(teams_to_fetch)}] {team}: no ESPN ID")
-            continue
+    for team in tournament_teams:
+        if team not in already_done:
+            espn_id = TEAM_TO_ESPN_ID.get(team)
+            if espn_id:
+                to_fetch.append((team, espn_id))
+            else:
+                failed.append(team)
+    for team_name, espn_id in first_four_teams:
+        if team_name not in already_done:
+            to_fetch.append((team_name, espn_id))
 
+    print(f"[players] Fetching ESPN stats for {len(to_fetch)} remaining teams ...")
+    if first_four_teams:
+        print(f"[players] Including {len(first_four_teams)} First Four teams")
+
+    for i, (team, espn_id) in enumerate(to_fetch):
         players = _fetch_team_players_espn(espn_id, team)
         if players:
             all_players.extend(players)
-            print(f"  [{i+1:2d}/{len(teams_to_fetch)}] {team} (ESPN {espn_id}): {len(players)} players")
+            print(f"  [{i+1:2d}/{len(to_fetch)}] {team} (ESPN {espn_id}): {len(players)} players")
             pd.DataFrame(all_players).to_csv(partial_cache, index=False)
         else:
             failed.append(team)
-            print(f"  [{i+1:2d}/{len(teams_to_fetch)}] {team} (ESPN {espn_id}): NOT FOUND")
+            print(f"  [{i+1:2d}/{len(to_fetch)}] {team} (ESPN {espn_id}): NOT FOUND")
 
         time.sleep(REQUEST_DELAY)
 
