@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { computeAutoLineup, computePlayerTotal } from '../lib/lineup.js'
+import { getTeamRowStyle } from '../lib/teamColors.js'
+import { fetchUpcomingOpponents, getOpponentForTeam, formatOpponentDisplay } from '../lib/espnUpcoming.js'
 
 const ROUNDS = ['Round of 64', 'Round of 32', 'Sweet Sixteen', 'Elite Eight', 'Final Four', 'Championship']
 const ROUND_SHORT = { 'Round of 64': 'R64', 'Round of 32': 'R32', 'Sweet Sixteen': 'S16', 'Elite Eight': 'E8', 'Final Four': 'F4', 'Championship': 'NAT' }
@@ -18,6 +20,8 @@ export default function PlayerScores() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [selectedDrafter, setSelectedDrafter] = useState('all')
+  const [upcomingOpponents, setUpcomingOpponents] = useState({})
+  const [tournamentOver, setTournamentOver] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -38,6 +42,16 @@ export default function PlayerScores() {
       setLoading(false)
     }
     load()
+  }, [])
+
+  useEffect(() => {
+    fetchUpcomingOpponents().then(setUpcomingOpponents).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    supabase.from('settings').select('value').eq('key', 'tournament_over').single()
+      .then(({ data }) => setTournamentOver(data?.value === 'true'))
+      .catch(() => {})
   }, [])
 
   if (loading) return <div className="text-center py-16 text-slate-500">Loading scores...</div>
@@ -116,7 +130,7 @@ export default function PlayerScores() {
                   <tr>
                     <th className="text-left px-3 py-2 font-semibold">Player</th>
                     <th className="text-left px-3 py-2 font-semibold hidden sm:table-cell">Team</th>
-                    <th className="text-center px-2 py-2 font-semibold text-slate-300 text-xs hidden md:table-cell">PPG</th>
+                    <th className="text-left px-3 py-2 font-semibold">Upcoming</th>
                     {ROUNDS.map(r => (
                       <th key={r} className="text-center px-2 py-2 font-semibold text-xs" title={r}>
                         {ROUND_SHORT[r]}
@@ -130,44 +144,45 @@ export default function PlayerScores() {
                     const role  = getRole(player)
                     const total = computePlayerTotal(player)
                     const isBench = role === 'bench'
+                    const useSolidStyle = player.is_eliminated || tournamentOver
+                    const rowStyle = getTeamRowStyle(player.team, { isBench, isEliminated: useSolidStyle, rowIndex: idx })
+                    const opponentEntry = getOpponentForTeam(player.team, upcomingOpponents)
+                    const opponent = player.is_eliminated
+                      ? '—'
+                      : (formatOpponentDisplay(opponentEntry) ?? '—')
                     return (
                       <tr
                         key={player.id}
-                        className={`border-t border-slate-100 ${
-                          isBench
-                            ? 'bg-slate-50 opacity-60'
-                            : player.is_eliminated
-                              ? 'bg-red-50/40'
-                              : idx % 2 === 0 ? 'bg-white' : 'bg-blue-50/20'
-                        }`}
+                        className="border-t border-slate-100"
+                        style={rowStyle}
                       >
                         <td className="px-3 py-2">
-                          <span className={player.is_eliminated ? 'line-through text-slate-400' : 'font-medium'}>
+                          <span className="font-medium">
                             {player.name}
                           </span>
                           <RoleBadge role={role} />
                           {player.is_eliminated && (
-                            <span className="ml-1 text-xs bg-red-100 text-red-500 px-1 rounded">OUT</span>
+                            <span className="ml-1 text-xs bg-white/30 text-white px-1 rounded">OUT</span>
                           )}
                         </td>
-                        <td className="px-3 py-2 text-slate-500 hidden sm:table-cell">
+                        <td className="px-3 py-2 hidden sm:table-cell">
                           {player.seed ? `(${player.seed}) ` : ''}{player.team}
                         </td>
-                        <td className="px-2 py-2 text-center text-slate-400 text-xs hidden md:table-cell">
-                          {player.season_ppg ?? '—'}
+                        <td className="px-3 py-2">
+                          {opponent}
                         </td>
                         {ROUNDS.map(r => {
                           const pts = getPoints(player, r)
                           return (
                             <td key={r} className="px-2 py-2 text-center">
                               {pts === null
-                                ? <span className="text-slate-300">—</span>
-                                : <span className={isBench ? 'text-slate-400' : 'font-medium'}>{pts}</span>
+                                ? <span className="opacity-70">—</span>
+                                : <span className={isBench ? 'opacity-80' : 'font-medium'}>{pts}</span>
                               }
                             </td>
                           )
                         })}
-                        <td className={`px-3 py-2 text-center font-bold ${isBench ? 'text-slate-400' : 'text-orange-500'}`}>
+                        <td className="px-3 py-2 text-center font-bold">
                           {total}
                         </td>
                       </tr>
@@ -186,7 +201,7 @@ export default function PlayerScores() {
                   {/* Lineup totals row */}
                   <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold">
                     <td className="px-3 py-2 text-slate-600" colSpan={2}>Lineup Total</td>
-                    <td className="hidden md:table-cell" />
+                    <td />
                     {ROUNDS.map(r => {
                       const roundTotal = getDrafterLineupRoundTotal(r)
                       const hasAny = lineup.some(p => getPoints(p, r) !== null)

@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase.js'
 import { syncTournamentScores } from '../lib/espnSync.js'
 
 const ROUNDS = ['Round of 64', 'Round of 32', 'Sweet Sixteen', 'Elite Eight', 'Final Four', 'Championship']
-const TABS = ['Drafters', 'Players', 'Scores', 'ESPN Sync']
+const TABS = ['Drafters', 'Players', 'Scores', 'ESPN Sync', 'Settings']
 
 // ─── Drafters Tab ──────────────────────────────────────────────────────────────
 function DraftersTab() {
@@ -449,6 +449,48 @@ function EspnSyncTab() {
   )
 }
 
+// ─── Settings Tab ───────────────────────────────────────────────────────────────
+function SettingsTab() {
+  const [tournamentOver, setTournamentOver] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    supabase.from('settings').select('value').eq('key', 'tournament_over').single()
+      .then(({ data }) => { setTournamentOver(data?.value === 'true') })
+      .finally(() => setLoading(false))
+  }, [])
+
+  async function toggleTournamentOver(e) {
+    const checked = e.target.checked
+    setSaving(true)
+    await supabase.from('settings').upsert({ key: 'tournament_over', value: checked ? 'true' : 'false', updated_at: new Date().toISOString() })
+    setTournamentOver(checked)
+    setSaving(false)
+  }
+
+  if (loading) return <div className="text-slate-500">Loading...</div>
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={tournamentOver}
+            onChange={toggleTournamentOver}
+            disabled={saving}
+            className="w-4 h-4 rounded border-slate-300 text-orange-500 focus:ring-orange-400"
+          />
+          <span className="font-medium text-slate-700">Tournament Over</span>
+        </label>
+      </div>
+      <p className="text-sm text-slate-500">
+        When enabled, all players use solid team-color styling on Player Scores and Standings (as if the tournament has finished and a champion was crowned). Use this to preview the final look.
+      </p>
+    </div>
+  )
+}
+
 // ─── Main AdminPanel ────────────────────────────────────────────────────────────
 export default function AdminPanel() {
   const [tab, setTab] = useState('Drafters')
@@ -479,6 +521,7 @@ export default function AdminPanel() {
       {tab === 'Players' && <PlayersTab />}
       {tab === 'Scores' && <ScoresTab />}
       {tab === 'ESPN Sync' && <EspnSyncTab />}
+      {tab === 'Settings' && <SettingsTab />}
     </div>
   )
 }

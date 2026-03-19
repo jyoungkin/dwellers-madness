@@ -1,15 +1,25 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { computeAutoLineup, computePlayerTotal } from '../lib/lineup.js'
-import { getTeamStyle } from '../lib/teamColors.js'
+import { getTeamPillStyle } from '../lib/teamColors.js'
 
 const MEDALS = ['🥇', '🥈', '🥉']
 
-function PlayerPill({ player, role }) {
+function PlayerPill({ player, role, tournamentOver }) {
   const pts = computePlayerTotal(player)
   const base = 'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border'
+  const useSolidStyle = player.is_eliminated || tournamentOver
 
   if (role === 'bench') {
+    if (useSolidStyle) {
+      const pillStyle = getTeamPillStyle(player.team, { isEliminated: true, isBench: true })
+      return (
+        <span className={base} style={pillStyle}>
+          {player.name.split(',')[0]}
+          <span className="opacity-60">{pts}</span>
+        </span>
+      )
+    }
     return (
       <span className={`${base} bg-slate-100 border-slate-200 text-slate-400`}>
         {player.name.split(',')[0]}
@@ -18,13 +28,13 @@ function PlayerPill({ player, role }) {
     )
   }
 
-  const teamStyle = getTeamStyle(player.team)
+  const pillStyle = getTeamPillStyle(player.team, { isEliminated: useSolidStyle })
   const isSixthMan = role === 'sixth'
 
   return (
     <span
-      className={`${base} ${player.is_eliminated ? 'opacity-50 line-through' : ''}`}
-      style={teamStyle ?? { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE', color: '#1E40AF' }}
+      className={base}
+      style={pillStyle}
     >
       {player.name.split(',')[0]}
       {isSixthMan && <span className="ml-0.5 text-xs opacity-70">(6th)</span>}
@@ -37,6 +47,13 @@ export default function Standings() {
   const [standings, setStandings] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [tournamentOver, setTournamentOver] = useState(false)
+
+  useEffect(() => {
+    supabase.from('settings').select('value').eq('key', 'tournament_over').single()
+      .then(({ data }) => setTournamentOver(data?.value === 'true'))
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     async function load() {
@@ -143,6 +160,7 @@ export default function Standings() {
                       key={p.id}
                       player={p}
                       role={p.id === drafter.sixthManId ? 'sixth' : 'starter'}
+                      tournamentOver={tournamentOver}
                     />
                   ))}
                 </div>
@@ -157,7 +175,7 @@ export default function Standings() {
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {drafter.bench.map(p => (
-                    <PlayerPill key={p.id} player={p} role="bench" />
+                    <PlayerPill key={p.id} player={p} role="bench" tournamentOver={tournamentOver} />
                   ))}
                 </div>
               </div>

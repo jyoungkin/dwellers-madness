@@ -120,6 +120,52 @@ export function getTeamStyle(team) {
 }
 
 /**
+ * Returns row style for Player Scores table.
+ * - Eliminated: solid team color background
+ * - Active: white/light alternating (isBench dulled)
+ */
+export function getTeamRowStyle(team, { isBench = false, isEliminated = false, rowIndex = 0 } = {}) {
+  if (isEliminated) {
+    const colors = TEAM_COLORS[team]
+    if (!colors) return { backgroundColor: '#fecaca', color: '#1e293b', ...(isBench && { opacity: 0.5 }) }
+    const primary = typeof colors === 'string' ? colors : colors.primary
+    const secondary = typeof colors === 'string' ? '#1e293b' : (colors.secondary || '#FFFFFF')
+    return { backgroundColor: primary, color: secondary, ...(isBench && { opacity: 0.5 }) }
+  }
+  const bg = rowIndex % 2 === 0 ? '#ffffff' : '#f1f5f9'
+  return isBench
+    ? { backgroundColor: bg, color: '#1e293b', opacity: 0.6 }
+    : { backgroundColor: bg, color: '#1e293b' }
+}
+
+/**
+ * Returns pill/badge style for Standings player tags.
+ * - Eliminated: solid team color background, secondary text, border
+ * - Active: light tint (getTeamStyle)
+ */
+export function getTeamPillStyle(team, { isEliminated = false, isBench = false } = {}) {
+  const colors = TEAM_COLORS[team]
+  if (!colors) {
+    return isEliminated
+      ? { backgroundColor: '#fecaca', color: '#1e293b', border: '1px solid #1e293b', ...(isBench && { opacity: 0.5 }) }
+      : { backgroundColor: '#EFF6FF', color: '#1E40AF', border: '1px solid #1E40AF' }
+  }
+  const primary = typeof colors === 'string' ? colors : colors.primary
+  const secondary = typeof colors === 'string' ? '#1e293b' : (colors.secondary || '#FFFFFF')
+  if (isEliminated) {
+    return {
+      backgroundColor: primary,
+      color: secondary,
+      border: `1px solid ${secondary}`,
+      ...(isBench && { opacity: 0.5 }),
+    }
+  }
+  const base = getTeamStyle(team)
+  const fallback = base ?? { backgroundColor: '#EFF6FF', color: '#1E40AF' }
+  return { ...fallback, border: `1px solid ${fallback.color}` }
+}
+
+/**
  * Returns a lighter hover-state variant of the team style (for interactive elements).
  */
 export function getTeamHoverStyle(team) {

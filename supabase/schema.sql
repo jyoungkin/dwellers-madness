@@ -60,7 +60,8 @@ create table if not exists settings (
 insert into settings (key, value) values
   ('draft_current_pick', '1'),
   ('draft_status', 'not_started'),
-  ('last_espn_sync', null)
+  ('last_espn_sync', null),
+  ('tournament_over', 'false')
 on conflict (key) do nothing;
 
 -- Disable RLS (private friends app — security by secret slug)
