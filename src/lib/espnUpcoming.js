@@ -94,8 +94,17 @@ const TEAM_TO_ESPN_ID = {
   "Prairie View A&M": "2640",
 }
 
-function getEspnId(ourTeam) {
+export function getEspnId(ourTeam) {
   return TEAM_TO_ESPN_ID[ourTeam] || null
+}
+
+/** ESPN team ID -> our team name (for creating players from ESPN data) */
+const ESPN_ID_TO_TEAM = {}
+for (const [ourTeam, espnId] of Object.entries(TEAM_TO_ESPN_ID)) {
+  if (!ESPN_ID_TO_TEAM[espnId]) ESPN_ID_TO_TEAM[espnId] = ourTeam
+}
+export function getTeamFromEspnId(espnId) {
+  return ESPN_ID_TO_TEAM[espnId] || null
 }
 
 /**
@@ -123,6 +132,7 @@ export async function fetchUpcomingOpponents() {
         const comps = ev.competitions?.[0]?.competitors || []
         if (comps.length < 2) continue
 
+        const isLive = status?.state === 'in'
         const c0 = comps[0]
         const c1 = comps[1]
         const idA = String(c0.team?.id ?? '')
@@ -133,8 +143,8 @@ export async function fetchUpcomingOpponents() {
         const seedB = c1.curatedRank?.current ?? c1.seed ?? null
 
         if (idA && idB) {
-          byEspnId[idA] = { opponent: nameB, opponentSeed: seedB }
-          byEspnId[idB] = { opponent: nameA, opponentSeed: seedA }
+          byEspnId[idA] = { opponent: nameB, opponentSeed: seedB, isLive }
+          byEspnId[idB] = { opponent: nameA, opponentSeed: seedA, isLive }
         }
       }
     } catch {
@@ -156,9 +166,10 @@ export function getOpponentForTeam(ourTeam, byEspnId) {
   return byEspnId[espnId] || null
 }
 
-/** Format opponent for display: "(3) Houston" or "Houston" */
+/** Format opponent for display: "(3) Houston" or "Houston" or "Houston • Live" */
 export function formatOpponentDisplay(entry) {
   if (!entry || !entry.opponent) return null
-  const { opponent, opponentSeed } = entry
-  return opponentSeed != null ? `(${opponentSeed}) ${opponent}` : opponent
+  const { opponent, opponentSeed, isLive } = entry
+  const base = opponentSeed != null ? `(${opponentSeed}) ${opponent}` : opponent
+  return isLive ? `${base} • Live` : base
 }

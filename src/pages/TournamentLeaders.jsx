@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase.js'
+import { fetchUpcomingOpponents, getOpponentForTeam } from '../lib/espnUpcoming.js'
 
 /** Rounds that count toward scoring. Play-In excluded (teams stay in dataset). */
 const ROUNDS = ['Round of 64', 'Round of 32', 'Sweet Sixteen', 'Elite Eight', 'Final Four', 'Championship']
@@ -54,6 +55,18 @@ export default function TournamentLeaders() {
   const [seedFilter, setSeedFilter] = useState('all')
   const [draftFilter, setDraftFilter] = useState('all')
   const [page, setPage] = useState(0)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const [upcomingOpponents, setUpcomingOpponents] = useState({})
+
+  useEffect(() => {
+    fetchUpcomingOpponents().then(setUpcomingOpponents).catch(() => {})
+  }, [refreshTrigger])
+
+  useEffect(() => {
+    const handler = () => setRefreshTrigger(t => t + 1)
+    window.addEventListener('espn-sync-complete', handler)
+    return () => window.removeEventListener('espn-sync-complete', handler)
+  }, [])
 
   useEffect(() => {
     async function load() {
@@ -75,7 +88,7 @@ export default function TournamentLeaders() {
       setLoading(false)
     }
     load()
-  }, [])
+  }, [refreshTrigger])
 
   // Reset page when filters change (must run before any conditional return)
   useEffect(() => { setPage(0) }, [selectedRound, seedFilter, draftFilter])
@@ -179,6 +192,7 @@ export default function TournamentLeaders() {
             ) : (
               leaders.map((player, idx) => {
                 const isDrafted = !!player.drafter_id
+                const isLive = getOpponentForTeam(player.team, upcomingOpponents)?.isLive
                 const rank = safePage * PAGE_SIZE + idx + 1
                 return (
                   <tr
@@ -190,7 +204,11 @@ export default function TournamentLeaders() {
                     <td className="px-3 py-2 text-slate-500 font-medium">{rank}</td>
                     <td className="px-3 py-2">
                       <span className={`font-medium text-slate-800 ${isDrafted ? 'text-amber-900' : ''}`}>
-                        {player.name}
+                        {isLive ? (
+                          <span className="text-red-600 font-semibold animate-blink">{player.name} •</span>
+                        ) : (
+                          player.name
+                        )}
                       </span>
                       {isDrafted && (
                         <span className="ml-1.5 text-xs bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded font-medium">
@@ -199,7 +217,7 @@ export default function TournamentLeaders() {
                       )}
                     </td>
                     <td className="px-3 py-2 text-slate-500 hidden sm:table-cell">
-                      {player.seed ? `(${player.seed}) ` : ''}{player.team}
+                      {player.team}
                     </td>
                     <td className="px-3 py-2 text-center font-bold text-orange-500">{player._pts}</td>
                   </tr>

@@ -2,27 +2,35 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { computeAutoLineup, computePlayerTotal } from '../lib/lineup.js'
 import { getTeamPillStyle } from '../lib/teamColors.js'
+import { fetchUpcomingOpponents, getOpponentForTeam } from '../lib/espnUpcoming.js'
 
 const MEDALS = ['🥇', '🥈', '🥉']
 
-function PlayerPill({ player, role, tournamentOver }) {
+function PlayerPill({ player, role, tournamentOver, isLive }) {
   const pts = computePlayerTotal(player)
   const base = 'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border'
   const useSolidStyle = player.is_eliminated || tournamentOver
+
+  const namePart = player.name.split(',')[0]
+  const nameDisplay = isLive ? (
+    <span className="text-red-600 font-semibold animate-blink">{namePart} •</span>
+  ) : (
+    namePart
+  )
 
   if (role === 'bench') {
     if (useSolidStyle) {
       const pillStyle = getTeamPillStyle(player.team, { isEliminated: true, isBench: true })
       return (
         <span className={base} style={pillStyle}>
-          {player.name.split(',')[0]}
+          {nameDisplay}
           <span className="opacity-60">{pts}</span>
         </span>
       )
     }
     return (
       <span className={`${base} bg-slate-100 border-slate-200 text-slate-400`}>
-        {player.name.split(',')[0]}
+        {nameDisplay}
         <span className="opacity-60">{pts}</span>
       </span>
     )
@@ -36,7 +44,7 @@ function PlayerPill({ player, role, tournamentOver }) {
       className={base}
       style={pillStyle}
     >
-      {player.name.split(',')[0]}
+      {nameDisplay}
       {isSixthMan && <span className="ml-0.5 text-xs opacity-70">(6th)</span>}
       <span className="font-bold">{pts}</span>
     </span>
@@ -48,11 +56,28 @@ export default function Standings() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [tournamentOver, setTournamentOver] = useState(false)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const [upcomingOpponents, setUpcomingOpponents] = useState({})
+
+  useEffect(() => {
+    fetchUpcomingOpponents().then(setUpcomingOpponents).catch(() => {})
+  }, [refreshTrigger])
 
   useEffect(() => {
     supabase.from('settings').select('value').eq('key', 'tournament_over').single()
       .then(({ data }) => setTournamentOver(data?.value === 'true'))
       .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    const handler = () => {
+      setRefreshTrigger(t => t + 1)
+      supabase.from('settings').select('value').eq('key', 'tournament_over').single()
+        .then(({ data }) => setTournamentOver(data?.value === 'true'))
+        .catch(() => {})
+    }
+    window.addEventListener('espn-sync-complete', handler)
+    return () => window.removeEventListener('espn-sync-complete', handler)
   }, [])
 
   useEffect(() => {
@@ -96,7 +121,7 @@ export default function Standings() {
       setLoading(false)
     }
     load()
-  }, [])
+  }, [refreshTrigger])
 
   if (loading) return <div className="text-center py-16 text-slate-500">Loading standings...</div>
   if (error)   return <div className="text-center py-16 text-red-500">Error: {error}</div>
@@ -161,6 +186,7 @@ export default function Standings() {
                       player={p}
                       role={p.id === drafter.sixthManId ? 'sixth' : 'starter'}
                       tournamentOver={tournamentOver}
+                      isLive={getOpponentForTeam(p.team, upcomingOpponents)?.isLive}
                     />
                   ))}
                 </div>
@@ -175,7 +201,13 @@ export default function Standings() {
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {drafter.bench.map(p => (
-                    <PlayerPill key={p.id} player={p} role="bench" tournamentOver={tournamentOver} />
+                    <PlayerPill
+                      key={p.id}
+                      player={p}
+                      role="bench"
+                      tournamentOver={tournamentOver}
+                      isLive={getOpponentForTeam(p.team, upcomingOpponents)?.isLive}
+                    />
                   ))}
                 </div>
               </div>

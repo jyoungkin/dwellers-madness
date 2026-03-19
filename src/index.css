@@ -13,3 +13,12 @@
     @apply line-through text-slate-400;
   }
 }
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.animate-blink {
+  animation: blink 1s ease-in-out infinite;
+}

@@ -1,4 +1,6 @@
+import { useEffect } from 'react'
 import { Outlet, NavLink } from 'react-router-dom'
+import { startAutoSync } from '../lib/autoSync.js'
 
 function NavItem({ to, children }) {
   return (
@@ -18,6 +20,11 @@ function NavItem({ to, children }) {
 }
 
 export default function Layout() {
+  useEffect(() => {
+    const stop = startAutoSync()
+    return stop
+  }, [])
+
   return (
     <div className="min-h-screen bg-slate-100">
       <header className="bg-[#1e3a5f] text-white shadow-lg">

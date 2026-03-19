@@ -22,6 +22,18 @@ export default function PlayerScores() {
   const [selectedDrafter, setSelectedDrafter] = useState('all')
   const [upcomingOpponents, setUpcomingOpponents] = useState({})
   const [tournamentOver, setTournamentOver] = useState(false)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
+
+  useEffect(() => {
+    const handler = () => {
+      setRefreshTrigger(t => t + 1)
+      supabase.from('settings').select('value').eq('key', 'tournament_over').single()
+        .then(({ data }) => setTournamentOver(data?.value === 'true'))
+        .catch(() => {})
+    }
+    window.addEventListener('espn-sync-complete', handler)
+    return () => window.removeEventListener('espn-sync-complete', handler)
+  }, [])
 
   useEffect(() => {
     async function load() {
@@ -42,11 +54,11 @@ export default function PlayerScores() {
       setLoading(false)
     }
     load()
-  }, [])
+  }, [refreshTrigger])
 
   useEffect(() => {
     fetchUpcomingOpponents().then(setUpcomingOpponents).catch(() => {})
-  }, [])
+  }, [refreshTrigger])
 
   useEffect(() => {
     supabase.from('settings').select('value').eq('key', 'tournament_over').single()
@@ -147,7 +159,7 @@ export default function PlayerScores() {
                     const useSolidStyle = player.is_eliminated || tournamentOver
                     const rowStyle = getTeamRowStyle(player.team, { isBench, isEliminated: useSolidStyle, rowIndex: idx })
                     const opponentEntry = getOpponentForTeam(player.team, upcomingOpponents)
-                    const opponent = player.is_eliminated
+                    const opponentText = player.is_eliminated
                       ? '—'
                       : (formatOpponentDisplay(opponentEntry) ?? '—')
                     return (
@@ -169,7 +181,11 @@ export default function PlayerScores() {
                           {player.seed ? `(${player.seed}) ` : ''}{player.team}
                         </td>
                         <td className="px-3 py-2">
-                          {opponent}
+                          {opponentEntry?.isLive ? (
+                            <span className="text-red-600 font-semibold animate-blink">{opponentText}</span>
+                          ) : (
+                            opponentText
+                          )}
                         </td>
                         {ROUNDS.map(r => {
                           const pts = getPoints(player, r)

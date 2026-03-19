@@ -342,6 +342,7 @@ function ScoresTab() {
 // ─── ESPN Sync Tab ─────────────────────────────────────────────────────────────
 function EspnSyncTab() {
   const [syncing, setSyncing] = useState(false)
+  const [resetting, setResetting] = useState(false)
   const [log, setLog] = useState([])
   const [result, setResult] = useState(null)
   const [lastSync, setLastSync] = useState(null)
@@ -350,6 +351,25 @@ function EspnSyncTab() {
     supabase.from('settings').select('value').eq('key', 'last_espn_sync').single()
       .then(({ data }) => setLastSync(data?.value || null))
   }, [])
+
+  async function runReset() {
+    if (!confirm('Clear all scores and remove auto-created players? Drafted players and draft picks will be kept.')) return
+    setResetting(true)
+    setResult(null)
+    try {
+      await supabase.from('player_scores').delete().or('id.eq.00000000-0000-0000-0000-000000000000,id.neq.00000000-0000-0000-0000-000000000000')
+      await supabase.from('players').delete().is('drafter_id', null)
+      const { data: players } = await supabase.from('players').select('id')
+      if (players?.length) {
+        await supabase.from('players').update({ is_eliminated: false }).in('id', players.map(p => p.id))
+      }
+      setResult({ ok: true })
+      window.dispatchEvent(new Event('espn-sync-complete'))
+    } catch (err) {
+      setResult({ error: err.message })
+    }
+    setResetting(false)
+  }
 
   async function runSync() {
     setSyncing(true)
@@ -373,19 +393,28 @@ function EspnSyncTab() {
         <div>
           <h3 className="font-semibold text-slate-700">Sync Scores from ESPN</h3>
           <p className="text-sm text-slate-500 mt-0.5">
-            Pulls points for all completed tournament games and matches them to your drafted players.
+            Pulls points for all tournament games (Round of 64 onward; Play-In excluded). Uses full box scores for all players, not just leaders.
           </p>
           {lastSync && (
             <p className="text-xs text-slate-400 mt-1">Last synced: {new Date(lastSync).toLocaleString()}</p>
           )}
         </div>
-        <button
-          onClick={runSync}
-          disabled={syncing}
-          className="bg-orange-500 text-white px-5 py-2.5 rounded-lg font-semibold hover:bg-orange-600 disabled:opacity-50 flex items-center gap-2"
-        >
-          {syncing ? '⏳ Syncing...' : '🔄 Refresh Scores from ESPN'}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={runReset}
+            disabled={resetting || syncing}
+            className="bg-slate-500 text-white px-4 py-2.5 rounded-lg font-medium hover:bg-slate-600 disabled:opacity-50"
+          >
+            {resetting ? 'Resetting...' : 'Reset Scores'}
+          </button>
+          <button
+            onClick={runSync}
+            disabled={syncing}
+            className="bg-orange-500 text-white px-5 py-2.5 rounded-lg font-semibold hover:bg-orange-600 disabled:opacity-50 flex items-center gap-2"
+          >
+            {syncing ? '⏳ Syncing...' : '🔄 Refresh Scores from ESPN'}
+          </button>
+        </div>
       </div>
 
       {/* Live log */}
@@ -396,8 +425,15 @@ function EspnSyncTab() {
         </div>
       )}
 
+      {/* Reset success */}
+      {result?.ok && (
+        <div className="bg-green-50 border border-green-200 text-green-700 rounded-xl p-4">
+          Scores cleared. Auto-created players removed. Run Refresh Scores to pull today&apos;s data.
+        </div>
+      )}
+
       {/* Results */}
-      {result && !result.error && (
+      {result && !result.error && !result.ok && (
         <div className="grid sm:grid-cols-2 gap-4">
           <div className="bg-green-50 border border-green-200 rounded-xl p-4">
             <div className="font-semibold text-green-700 mb-2">✅ Matched ({result.matched.length})</div>
