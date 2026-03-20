@@ -219,15 +219,23 @@ function findBestNameMatch(ourName, espnNames, allStats, ourTeam) {
 
   const parts = normalized.split(' ').filter(Boolean)
   const lastName = parts[parts.length - 1]
-  const firstInitial = parts[0]?.[0]
+  const firstName = parts[0] || ''
+  const firstInitial = firstName[0]
 
-  // 3. First initial + last name (e.g. "D Acuff" matches "Darius Acuff") — require team match, never last-name-only
+  // 3. First initial + last name — require team match. When multiple (e.g. Cameron/Cayden Boozer), require full first name.
   const fiLastCandidates = espnNames.filter(en => {
     const n = normalizeName(en)
     const nameOk = n.includes(lastName) && (n.startsWith(firstInitial + ' ') || n.startsWith(firstInitial))
     return nameOk && teamsMatch(ourTeam, allStats[en]?.find(s => s.team)?.team)
   })
   if (fiLastCandidates.length === 1) return fiLastCandidates[0]
+  if (fiLastCandidates.length > 1 && firstName.length >= 2) {
+    const byFirstName = fiLastCandidates.filter(en => {
+      const espnFirst = normalizeName(en).split(' ')[0] || ''
+      return espnFirst === firstName || espnFirst.startsWith(firstName) || firstName.startsWith(espnFirst)
+    })
+    if (byFirstName.length === 1) return byFirstName[0]
+  }
 
   return null
 }
@@ -242,7 +250,8 @@ function gameHasStarted(event) {
 /** Get loser ESPN team ID from completed game, or null */
 function getLoserTeamId(event) {
   const comps = event.competitions?.[0]?.competitors || []
-  const loser = comps.find(c => c.winner === false)
+  // ESPN returns winner as string "true"/"false", not boolean
+  const loser = comps.find(c => c.winner === false || c.winner === 'false')
   return loser ? String(loser.team?.id ?? '') : null
 }
 

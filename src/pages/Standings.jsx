@@ -13,23 +13,15 @@ function PlayerPill({ player, role, tournamentOver, isLive }) {
 
   const namePart = player.name.split(',')[0]
   const nameDisplay = isLive ? (
-    <span className="text-red-600 font-semibold animate-blink">{namePart} •</span>
+    <span className="font-semibold animate-blink">{namePart} •</span>
   ) : (
     namePart
   )
 
   if (role === 'bench') {
-    if (useSolidStyle) {
-      const pillStyle = getTeamPillStyle(player.team, { isEliminated: true, isBench: true })
-      return (
-        <span className={base} style={pillStyle}>
-          {nameDisplay}
-          <span className="opacity-60">{pts}</span>
-        </span>
-      )
-    }
+    const pillStyle = getTeamPillStyle(player.team, { isBench: true })
     return (
-      <span className={`${base} bg-slate-100 border-slate-200 text-slate-400`}>
+      <span className={base} style={pillStyle}>
         {nameDisplay}
         <span className="opacity-60">{pts}</span>
       </span>

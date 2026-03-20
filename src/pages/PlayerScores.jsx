@@ -176,16 +176,13 @@ export default function PlayerScores() {
                             {player.name}
                           </span>
                           <RoleBadge role={role} />
-                          {player.is_eliminated && (
-                            <span className="ml-1 text-xs bg-white/30 text-white px-1 rounded">OUT</span>
-                          )}
                         </td>
                         <td className="px-3 py-2 hidden sm:table-cell">
                           {player.seed ? `(${player.seed}) ` : ''}{player.team}
                         </td>
                         <td className="px-3 py-2">
                           {opponentEntry?.isLive ? (
-                            <span className="text-red-600 font-semibold animate-blink">{opponentText}</span>
+                            <span className="font-semibold animate-blink">{opponentText}</span>
                           ) : (
                             opponentText
                           )}

@@ -208,7 +208,7 @@ export default function TournamentLeaders() {
                     <td className="px-3 py-2">
                       <span className={`font-medium text-slate-800 ${isDrafted ? 'text-amber-900' : ''}`}>
                         {isLive ? (
-                          <span className="text-red-600 font-semibold animate-blink">{player.name} •</span>
+                          <span className="font-semibold animate-blink">{player.name} •</span>
                         ) : (
                           player.name
                         )}
