@@ -67,30 +67,48 @@ function normalizeName(name) {
   return s.replace(/[^a-z\s]/g, '').replace(/\s+/g, ' ').trim()
 }
 
-// Get today's date string YYYYMMDD
+// Get today's date string YYYYMMDD in US Eastern (NCAA games use Eastern)
 function todayStr() {
-  return new Date().toISOString().slice(0, 10).replace(/-/g, '')
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+  const parts = formatter.formatToParts(new Date())
+  const y = parts.find(p => p.type === 'year').value
+  const m = parts.find(p => p.type === 'month').value
+  const d = parts.find(p => p.type === 'day').value
+  return `${y}${m}${d}`
+}
+
+const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball'
+
+async function fetchFromEspn(path) {
+  const url = `${ESPN_BASE}${path}`
+  try {
+    const res = await fetch(url, { mode: 'cors' })
+    if (!res.ok) throw new Error(`ESPN API ${res.status}: ${res.statusText}`)
+    return res.json()
+  } catch (err) {
+    try {
+      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
+      const proxyRes = await fetch(proxyUrl)
+      if (!proxyRes.ok) throw new Error(`Proxy failed: ${proxyRes.status}`)
+      return proxyRes.json()
+    } catch (proxyErr) {
+      throw new Error(`ESPN fetch failed: ${err.message}. CORS proxy also failed.`)
+    }
+  }
 }
 
 async function fetchEventsForDate(dateStr) {
-  const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${dateStr}&groups=100&limit=50`
-  try {
-    const res = await fetch(url)
-    const data = await res.json()
-    return data.events || []
-  } catch {
-    return []
-  }
+  const data = await fetchFromEspn(`/scoreboard?dates=${dateStr}&groups=100&limit=50`)
+  return data.events || []
 }
 
 async function fetchGameSummary(eventId) {
-  const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=${eventId}`
-  try {
-    const res = await fetch(url)
-    return await res.json()
-  } catch {
-    return null
-  }
+  return await fetchFromEspn(`/summary?event=${eventId}`)
 }
 
 function parsePlayerPointsFromSummary(summary, roundName) {
@@ -230,13 +248,13 @@ function getLoserTeamId(event) {
 
 export async function syncTournamentScores(onProgress) {
   const today = todayStr()
-  const datesToFetch = TOURNAMENT_DATES.includes(today) ? [today] : []
+  const datesToFetch = TOURNAMENT_DATES.filter(d => d <= today)
 
   if (datesToFetch.length === 0) {
     return { matched: [], unmatched: [], gamesStartedToday: false }
   }
 
-  onProgress?.(`Fetching games for today (${today})...`)
+  onProgress?.(`Fetching games for ${datesToFetch.length} date(s) through ${today} (Eastern)...`)
 
   await supabase.from('player_scores').delete().eq('round_name', 'Play-In')
 

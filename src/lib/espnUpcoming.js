@@ -111,18 +111,48 @@ export function getTeamFromEspnId(espnId) {
  * Fetches upcoming (not yet completed) tournament games and returns
  * Map<espnTeamId, { opponent, opponentSeed }>. Uses ESPN team IDs for matching.
  */
+function todayStrEastern() {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+  const parts = formatter.formatToParts(new Date())
+  const y = parts.find(p => p.type === 'year').value
+  const m = parts.find(p => p.type === 'month').value
+  const d = parts.find(p => p.type === 'day').value
+  return `${y}${m}${d}`
+}
+
 export async function fetchUpcomingOpponents() {
-  const today = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+  const today = todayStrEastern()
   const datesToFetch = TOURNAMENT_DATES.filter(d => d >= today).slice(0, 4)
 
   // Map by ESPN team ID for reliable matching
   const byEspnId = {}
 
+  async function fetchScoreboard(url) {
+    try {
+      const res = await fetch(url, { mode: 'cors' })
+      if (!res.ok) throw new Error(`${res.status}`)
+      return res.json()
+    } catch {
+      try {
+        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
+        const proxyRes = await fetch(proxyUrl)
+        if (!proxyRes.ok) return { events: [] }
+        return proxyRes.json()
+      } catch {
+        return { events: [] }
+      }
+    }
+  }
+
   for (const dateStr of datesToFetch) {
     const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${dateStr}&groups=100&seasontype=3&limit=50`
     try {
-      const res = await fetch(url)
-      const data = await res.json()
+      const data = await fetchScoreboard(url)
       const events = data.events || []
 
       for (const ev of events) {

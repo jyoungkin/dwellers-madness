@@ -15,12 +15,22 @@ const TOURNAMENT_DATES = [
 const SLOW_INTERVAL_MS = 15 * 60 * 1000  // 15 min
 const FAST_INTERVAL_MS = 60 * 1000       // 1 min
 
-function todayStr() {
-  return new Date().toISOString().slice(0, 10).replace(/-/g, '')
+function todayStrEastern() {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+  const parts = formatter.formatToParts(new Date())
+  const y = parts.find(p => p.type === 'year').value
+  const m = parts.find(p => p.type === 'month').value
+  const d = parts.find(p => p.type === 'day').value
+  return `${y}${m}${d}`
 }
 
 function isTournamentActive() {
-  const today = todayStr()
+  const today = todayStrEastern()
   const firstDate = TOURNAMENT_DATES[0]
   const lastDate = TOURNAMENT_DATES[TOURNAMENT_DATES.length - 1]
   return today >= firstDate && today <= lastDate
@@ -48,7 +58,7 @@ export function startAutoSync() {
 
   async function runSync() {
     try {
-      const day = todayStr()
+      const day = todayStrEastern()
       if (day !== lastDayStr) {
         lastDayStr = day
         currentIntervalMs = SLOW_INTERVAL_MS
