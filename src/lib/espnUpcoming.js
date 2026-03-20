@@ -125,9 +125,20 @@ function todayStrEastern() {
   return `${y}${m}${d}`
 }
 
+function prevDay(yyyymmdd) {
+  const y = parseInt(yyyymmdd.slice(0, 4), 10)
+  const m = parseInt(yyyymmdd.slice(4, 6), 10) - 1
+  const d = parseInt(yyyymmdd.slice(6, 8), 10)
+  const date = new Date(y, m, d)
+  date.setDate(date.getDate() - 1)
+  return date.getFullYear() + String(date.getMonth() + 1).padStart(2, '0') + String(date.getDate()).padStart(2, '0')
+}
+
 export async function fetchUpcomingOpponents() {
   const today = todayStrEastern()
-  const datesToFetch = TOURNAMENT_DATES.filter(d => d >= today).slice(0, 4)
+  const yesterday = prevDay(today)
+  const minDate = yesterday < today ? yesterday : today
+  const datesToFetch = TOURNAMENT_DATES.filter(d => d >= minDate).slice(0, 5)
 
   // Map by ESPN team ID for reliable matching
   const byEspnId = {}

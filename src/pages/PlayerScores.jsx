@@ -57,7 +57,10 @@ export default function PlayerScores() {
   }, [refreshTrigger])
 
   useEffect(() => {
-    fetchUpcomingOpponents().then(setUpcomingOpponents).catch(() => {})
+    const load = () => fetchUpcomingOpponents().then(setUpcomingOpponents).catch(() => {})
+    load()
+    const interval = setInterval(load, 60 * 1000)
+    return () => clearInterval(interval)
   }, [refreshTrigger])
 
   useEffect(() => {
