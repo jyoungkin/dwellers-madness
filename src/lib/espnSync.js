@@ -307,42 +307,46 @@ export async function syncTournamentScores(onProgress) {
 
   await supabase.from('player_scores').delete().eq('round_name', 'Play-In')
 
-  // Load completed events we've already synced — skip re-fetching; scores are final for those games
+  // Load completed events we've already synced — only fetch live + new completed for stats
   const { data: syncedData } = await supabase.from('settings').select('value').eq('key', 'synced_completed_events').maybeSingle()
   const syncedCompletedEvents = new Set(JSON.parse(syncedData?.value || '[]'))
 
-  // Collect all player stats (live games + completed games not yet synced)
-  const allStats = {}
+  // Pass 1: Build loserTeamIds from ALL completed games (scoreboard has winner/loser, no fetch needed)
   const loserTeamIds = new Set()
   let championshipCompleted = false
   let gamesStartedToday = false
-  const newlyCompletedEvents = []
-
+  const allEventsByDate = []
   for (const dateStr of datesToFetch) {
     const events = await fetchEventsForDate(dateStr)
-    const isToday = dateStr === today
-
+    allEventsByDate.push({ dateStr, events, isToday: dateStr === today })
+  }
+  for (const { dateStr, events, isToday } of allEventsByDate) {
     for (const event of events) {
       const hasStarted = gameHasStarted(event)
       if (isToday && hasStarted) gamesStartedToday = true
-
-      if (!hasStarted) continue
-
+      const isCompleted = event.status?.type?.completed === true || event.status?.type?.completed === 'true'
+      if (!isCompleted) continue
       const noteHeadline = event.competitions?.[0]?.notes?.[0]?.headline || event.notes?.[0]?.headline
       const roundName = normalizeRoundName(noteHeadline, dateStr)
-      if (!roundName) continue
-      if (roundName === 'Play-In') continue
+      if (!roundName || roundName === 'Play-In') continue
+      const loserId = getLoserTeamId(event)
+      if (loserId) loserTeamIds.add(loserId)
+      if (dateStr === '20260406' && roundName === 'Championship') championshipCompleted = true
+    }
+  }
 
+  // Pass 2: Fetch stats only for live games + completed games not yet synced
+  const allStats = {}
+  const newlyCompletedEvents = []
+  for (const { dateStr, events, isToday } of allEventsByDate) {
+    for (const event of events) {
+      const hasStarted = gameHasStarted(event)
+      if (!hasStarted) continue
+      const noteHeadline = event.competitions?.[0]?.notes?.[0]?.headline || event.notes?.[0]?.headline
+      const roundName = normalizeRoundName(noteHeadline, dateStr)
+      if (!roundName || roundName === 'Play-In') continue
       const isCompleted = event.status?.type?.completed === true || event.status?.type?.completed === 'true'
-
-      // Skip fetch for completed games we've already synced — scores are final
-      const alreadySynced = isCompleted && syncedCompletedEvents.has(String(event.id))
-      if (alreadySynced) {
-        const loserId = getLoserTeamId(event)
-        if (loserId) loserTeamIds.add(loserId)
-        if (dateStr === '20260406' && roundName === 'Championship') championshipCompleted = true
-        continue
-      }
+      if (isCompleted && syncedCompletedEvents.has(String(event.id))) continue
 
       onProgress?.(`Fetching: ${event.shortName || event.id} (${roundName})${!isCompleted ? ' [live]' : ''}`)
       const summary = await fetchGameSummary(event.id)
@@ -350,22 +354,14 @@ export async function syncTournamentScores(onProgress) {
       if (Object.keys(gamePlayers).length === 0) {
         gamePlayers = parsePlayerPointsFromScoreboard(event, roundName)
       }
-
       for (const [name, stats] of Object.entries(gamePlayers)) {
         if (!allStats[name]) allStats[name] = []
         const exists = allStats[name].some(s => s.roundName === stats.roundName)
         if (!exists) allStats[name].push(stats)
       }
-
-      if (isCompleted) {
-        const loserId = getLoserTeamId(event)
-        if (loserId) loserTeamIds.add(loserId)
-        newlyCompletedEvents.push(String(event.id))
-        if (dateStr === '20260406' && roundName === 'Championship') championshipCompleted = true
-      }
+      if (isCompleted) newlyCompletedEvents.push(String(event.id))
     }
   }
-
   if (newlyCompletedEvents.length) {
     const merged = new Set([...syncedCompletedEvents, ...newlyCompletedEvents])
     await supabase.from('settings').upsert({ key: 'synced_completed_events', value: JSON.stringify([...merged]), updated_at: new Date().toISOString() })
@@ -524,7 +520,7 @@ export async function syncTournamentScores(onProgress) {
     await supabase.from('players').delete().in('id', toRemove)
   }
 
-  // Mark eliminated: players whose team lost a game (any round)
+  // Elimination: from completed games, loser team → all players on that team
   const playerIdsToEliminate = (allPlayers || [])
     .filter(p => p.team && isTeamEliminated(p.team, loserTeamIds))
     .map(p => p.id)

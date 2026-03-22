@@ -360,10 +360,6 @@ function EspnSyncTab() {
       await supabase.from('player_scores').delete().or('id.eq.00000000-0000-0000-0000-000000000000,id.neq.00000000-0000-0000-0000-000000000000')
       await supabase.from('players').delete().is('drafter_id', null)
       await supabase.from('settings').delete().eq('key', 'synced_completed_events')
-      const { data: players } = await supabase.from('players').select('id')
-      if (players?.length) {
-        await supabase.from('players').update({ is_eliminated: false }).in('id', players.map(p => p.id))
-      }
       setResult({ ok: true })
       window.dispatchEvent(new Event('espn-sync-complete'))
     } catch (err) {
