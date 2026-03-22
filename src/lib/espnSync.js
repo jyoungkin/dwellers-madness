@@ -217,7 +217,11 @@ function teamsMatch(ourTeam, statsTeam) {
   if (ourId && statsId && ourId === statsId) return true
   const ourLower = ourTeam.toLowerCase()
   const statsLower = statsTeam.toLowerCase()
-  return statsLower === ourLower || statsLower.includes(ourLower) || ourLower.includes(statsLower)
+  if (statsLower === ourLower) return true
+  // Avoid Tennessee vs Tennessee State: reject when one is a prefix and the other continues with more text
+  if (statsLower.startsWith(ourLower) && statsLower.length > ourLower.length && /[\s-]/.test(statsLower[ourLower.length])) return false
+  if (ourLower.startsWith(statsLower) && ourLower.length > statsLower.length && /[\s-]/.test(ourLower[statsLower.length])) return false
+  return statsLower.includes(ourLower) || ourLower.includes(statsLower)
 }
 
 /** True if team is in the set of losing ESPN team IDs (handles name variants) */
@@ -303,12 +307,16 @@ export async function syncTournamentScores(onProgress) {
 
   await supabase.from('player_scores').delete().eq('round_name', 'Play-In')
 
-  // Collect all player stats (from completed AND in-progress games)
-  // Map: espnPlayerName -> { roundName, points }[]
+  // Load completed events we've already synced — skip re-fetching; scores are final for those games
+  const { data: syncedData } = await supabase.from('settings').select('value').eq('key', 'synced_completed_events').maybeSingle()
+  const syncedCompletedEvents = new Set(JSON.parse(syncedData?.value || '[]'))
+
+  // Collect all player stats (live games + completed games not yet synced)
   const allStats = {}
   const loserTeamIds = new Set()
   let championshipCompleted = false
   let gamesStartedToday = false
+  const newlyCompletedEvents = []
 
   for (const dateStr of datesToFetch) {
     const events = await fetchEventsForDate(dateStr)
@@ -327,6 +335,15 @@ export async function syncTournamentScores(onProgress) {
 
       const isCompleted = event.status?.type?.completed === true || event.status?.type?.completed === 'true'
 
+      // Skip fetch for completed games we've already synced — scores are final
+      const alreadySynced = isCompleted && syncedCompletedEvents.has(String(event.id))
+      if (alreadySynced) {
+        const loserId = getLoserTeamId(event)
+        if (loserId) loserTeamIds.add(loserId)
+        if (dateStr === '20260406' && roundName === 'Championship') championshipCompleted = true
+        continue
+      }
+
       onProgress?.(`Fetching: ${event.shortName || event.id} (${roundName})${!isCompleted ? ' [live]' : ''}`)
       const summary = await fetchGameSummary(event.id)
       let gamePlayers = summary ? parsePlayerPointsFromSummary(summary, roundName) : {}
@@ -343,12 +360,15 @@ export async function syncTournamentScores(onProgress) {
       if (isCompleted) {
         const loserId = getLoserTeamId(event)
         if (loserId) loserTeamIds.add(loserId)
-
-        if (dateStr === '20260406' && roundName === 'Championship') {
-          championshipCompleted = true
-        }
+        newlyCompletedEvents.push(String(event.id))
+        if (dateStr === '20260406' && roundName === 'Championship') championshipCompleted = true
       }
     }
+  }
+
+  if (newlyCompletedEvents.length) {
+    const merged = new Set([...syncedCompletedEvents, ...newlyCompletedEvents])
+    await supabase.from('settings').upsert({ key: 'synced_completed_events', value: JSON.stringify([...merged]), updated_at: new Date().toISOString() })
   }
 
   const espnNames = Object.keys(allStats)
@@ -508,8 +528,17 @@ export async function syncTournamentScores(onProgress) {
   const playerIdsToEliminate = (allPlayers || [])
     .filter(p => p.team && isTeamEliminated(p.team, loserTeamIds))
     .map(p => p.id)
-  if (playerIdsToEliminate.length) {
-    await supabase.from('players').update({ is_eliminated: true }).in('id', playerIdsToEliminate)
+  const eliminateSet = new Set(playerIdsToEliminate)
+  const playerIdsToClear = (allPlayers || []).filter(p => !eliminateSet.has(p.id)).map(p => p.id)
+  // Batch updates to avoid URI length limits with large .in() arrays
+  const BATCH = 50
+  for (let i = 0; i < playerIdsToEliminate.length; i += BATCH) {
+    const batch = playerIdsToEliminate.slice(i, i + BATCH)
+    if (batch.length) await supabase.from('players').update({ is_eliminated: true }).in('id', batch)
+  }
+  for (let i = 0; i < playerIdsToClear.length; i += BATCH) {
+    const batch = playerIdsToClear.slice(i, i + BATCH)
+    if (batch.length) await supabase.from('players').update({ is_eliminated: false }).in('id', batch)
   }
 
   if (championshipCompleted) {
