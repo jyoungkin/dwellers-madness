@@ -130,7 +130,7 @@ function parsePlayerPointsFromSummary(summary, roundName) {
           const pts = parseInt(ptsStr, 10)
           const espnPlayerId = String(athlete.athlete?.id ?? athlete.id ?? '')
           const espnTeamId = String(teamData.team?.id ?? '')
-          if (displayName && !isNaN(pts) && pts > 0) {
+          if (displayName && !isNaN(pts) && pts >= 0) {
             results[displayName] = { points: pts, roundName, team, espnPlayerId, espnTeamId }
           }
         }
@@ -154,7 +154,7 @@ function parsePlayerPointsFromSummary(summary, roundName) {
           const pts = parseInt(ptsStr, 10)
           const espnPlayerId = String(athlete.athlete?.id ?? athlete.id ?? '')
           const espnTeamId = String(teamData.team?.id ?? '')
-          if (displayName && !isNaN(pts) && pts > 0) {
+          if (displayName && !isNaN(pts) && pts >= 0) {
             results[displayName] = { points: pts, roundName, team, espnPlayerId, espnTeamId }
           }
         }
@@ -196,9 +196,24 @@ function parsePlayerPointsFromScoreboard(event, roundName) {
 
 function teamsMatch(ourTeam, statsTeam) {
   if (!ourTeam || !statsTeam) return false
+  const ourId = getEspnId(ourTeam)
+  const statsId = getEspnId(statsTeam)
+  if (ourId && statsId && ourId === statsId) return true
   const ourLower = ourTeam.toLowerCase()
   const statsLower = statsTeam.toLowerCase()
   return statsLower === ourLower || statsLower.includes(ourLower) || ourLower.includes(statsLower)
+}
+
+/** True if team is in the set of losing ESPN team IDs (handles name variants) */
+function isTeamEliminated(team, loserTeamIds) {
+  if (!team || !loserTeamIds?.size) return false
+  const ourId = getEspnId(team)
+  if (ourId && loserTeamIds.has(ourId)) return true
+  for (const lid of loserTeamIds) {
+    const canonical = getTeamFromEspnId(lid)
+    if (canonical && teamsMatch(team, canonical)) return true
+  }
+  return false
 }
 
 function findBestNameMatch(ourName, espnNames, allStats, ourTeam) {
@@ -244,14 +259,19 @@ function findBestNameMatch(ourName, espnNames, allStats, ourTeam) {
 function gameHasStarted(event) {
   const status = event.status?.type
   if (!status) return false
-  return status.state === 'in' || status.completed === true
+  return status.state === 'in' || status.completed === true || status.completed === 'true'
 }
 
 /** Get loser ESPN team ID from completed game, or null */
 function getLoserTeamId(event) {
   const comps = event.competitions?.[0]?.competitors || []
   // ESPN returns winner as string "true"/"false", not boolean
-  const loser = comps.find(c => c.winner === false || c.winner === 'false')
+  let loser = comps.find(c => c.winner === false || c.winner === 'false')
+  if (!loser && comps.length === 2) {
+    const scoreA = parseInt(comps[0]?.score, 10) || 0
+    const scoreB = parseInt(comps[1]?.score, 10) || 0
+    loser = scoreA < scoreB ? comps[0] : comps[1]
+  }
   return loser ? String(loser.team?.id ?? '') : null
 }
 
@@ -289,7 +309,7 @@ export async function syncTournamentScores(onProgress) {
       if (!roundName) continue
       if (roundName === 'Play-In') continue
 
-      const isCompleted = event.status?.type?.completed === true
+      const isCompleted = event.status?.type?.completed === true || event.status?.type?.completed === 'true'
 
       onProgress?.(`Fetching: ${event.shortName || event.id} (${roundName})${!isCompleted ? ' [live]' : ''}`)
       const summary = await fetchGameSummary(event.id)
@@ -464,9 +484,9 @@ export async function syncTournamentScores(onProgress) {
     await supabase.from('players').delete().in('id', toRemove)
   }
 
-  // Mark eliminated: players whose team lost a game
+  // Mark eliminated: players whose team lost a game (any round)
   const playerIdsToEliminate = (allPlayers || [])
-    .filter(p => p.team && loserTeamIds.has(getEspnId(p.team)))
+    .filter(p => p.team && isTeamEliminated(p.team, loserTeamIds))
     .map(p => p.id)
   if (playerIdsToEliminate.length) {
     await supabase.from('players').update({ is_eliminated: true }).in('id', playerIdsToEliminate)
