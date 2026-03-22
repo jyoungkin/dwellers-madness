@@ -194,6 +194,22 @@ function parsePlayerPointsFromScoreboard(event, roundName) {
   return results
 }
 
+/** Same-person check: rejects Cameron vs Cayden Boozer when espn_player_id is wrong */
+function namesCompatible(ourName, espnName) {
+  const ourNorm = normalizeName(ourName)
+  const espnNorm = normalizeName(espnName)
+  if (ourNorm === espnNorm) return true
+  if (ourNorm.startsWith(espnNorm + ' ') || espnNorm.startsWith(ourNorm + ' ')) return true
+  const ourParts = ourNorm.split(' ').filter(Boolean)
+  const espnParts = espnNorm.split(' ').filter(Boolean)
+  const ourLast = ourParts[ourParts.length - 1] || ''
+  const espnLast = espnParts[espnParts.length - 1] || ''
+  if (ourLast !== espnLast) return false
+  const ourFirst = ourParts[0] || ''
+  const espnFirst = espnParts[0] || ''
+  return ourFirst === espnFirst || ourFirst.startsWith(espnFirst) || espnFirst.startsWith(ourFirst)
+}
+
 function teamsMatch(ourTeam, statsTeam) {
   if (!ourTeam || !statsTeam) return false
   const ourId = getEspnId(ourTeam)
@@ -360,12 +376,16 @@ export async function syncTournamentScores(onProgress) {
 
     if (player.espn_player_id && byEspnPlayerId[player.espn_player_id]) {
       const candidate = byEspnPlayerId[player.espn_player_id]
-      const stats = allStats[candidate]
-      const statsTeam = stats?.find(s => s.team)?.team
-      const statsTeamId = stats?.find(s => s.espnTeamId)?.espnTeamId
-      const ourTeamId = getEspnId(player.team)
-      if ((statsTeamId && ourTeamId && statsTeamId === ourTeamId) || teamsMatch(player.team, statsTeam)) {
-        espnName = candidate
+      if (!namesCompatible(player.name, candidate)) {
+        // espn_player_id points to wrong person (e.g. Cameron vs Cayden Boozer) — fall back to name match
+      } else {
+        const stats = allStats[candidate]
+        const statsTeam = stats?.find(s => s.team)?.team
+        const statsTeamId = stats?.find(s => s.espnTeamId)?.espnTeamId
+        const ourTeamId = getEspnId(player.team)
+        if ((statsTeamId && ourTeamId && statsTeamId === ourTeamId) || teamsMatch(player.team, statsTeam)) {
+          espnName = candidate
+        }
       }
     }
 
@@ -388,7 +408,7 @@ export async function syncTournamentScores(onProgress) {
         { onConflict: 'player_id,round_name' }
       )
     }
-    if (espnPlayerId && !player.espn_player_id) {
+    if (espnPlayerId && espnPlayerId !== player.espn_player_id) {
       await supabase.from('players').update({ espn_player_id: espnPlayerId }).eq('id', player.id)
     }
     matched.push({ ourName: player.name, espnName })
