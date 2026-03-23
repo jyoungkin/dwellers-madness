@@ -29,6 +29,7 @@ create table if not exists players (
   is_eliminated boolean not null default false,
   drafter_id uuid references drafters(id) on delete set null,
   espn_player_id text,
+  espn_team_id text,
   created_at timestamptz default now()
 );
 

@@ -131,7 +131,9 @@ function parsePlayerPointsFromSummary(summary, roundName) {
           const espnPlayerId = String(athlete.athlete?.id ?? athlete.id ?? '')
           const espnTeamId = String(teamData.team?.id ?? '')
           if (displayName && !isNaN(pts) && pts >= 0) {
-            results[displayName] = { points: pts, roundName, team, espnPlayerId, espnTeamId }
+            const rec = { points: pts, roundName, team, espnPlayerId, espnTeamId, displayName }
+            const key = espnPlayerId ? espnPlayerId : `_n:${displayName}`
+            results[key] = rec
           }
         }
       }
@@ -155,7 +157,9 @@ function parsePlayerPointsFromSummary(summary, roundName) {
           const espnPlayerId = String(athlete.athlete?.id ?? athlete.id ?? '')
           const espnTeamId = String(teamData.team?.id ?? '')
           if (displayName && !isNaN(pts) && pts >= 0) {
-            results[displayName] = { points: pts, roundName, team, espnPlayerId, espnTeamId }
+            const rec = { points: pts, roundName, team, espnPlayerId, espnTeamId, displayName }
+            const key = espnPlayerId ? espnPlayerId : `_n:${displayName}`
+            results[key] = rec
           }
         }
       }
@@ -186,7 +190,9 @@ function parsePlayerPointsFromScoreboard(event, roundName) {
         const playerTeam = athleteTeamId ? (getTeamFromEspnId(athleteTeamId) || comp.team?.displayName) : team
         const espnPlayerId = String(l.athlete?.id ?? '')
         const espnTeamId = athleteTeamId || espnId
-        results[displayName] = { points: pts, roundName, team: playerTeam || team, espnPlayerId, espnTeamId }
+        const rec = { points: pts, roundName, team: playerTeam || team, espnPlayerId, espnTeamId, displayName }
+        const key = espnPlayerId ? espnPlayerId : `_n:${displayName}`
+        results[key] = rec
       }
     }
   }
@@ -236,20 +242,27 @@ function isTeamEliminated(team, loserTeamIds) {
   return false
 }
 
-function findBestNameMatch(ourName, espnNames, allStats, ourTeam) {
+function getEspnDisplayName(key, allStats) {
+  if (key.startsWith('_n:')) return key.slice(3)
+  return allStats[key]?.[0]?.displayName || key
+}
+
+function findBestNameMatch(ourName, allStatsKeys, allStats, ourTeam) {
   if (!ourTeam) return null
   const normalized = normalizeName(ourName)
 
   // 1. Exact match (require team match)
-  for (const en of espnNames) {
-    if (normalizeName(en) === normalized && teamsMatch(ourTeam, allStats[en]?.find(s => s.team)?.team)) return en
+  for (const key of allStatsKeys) {
+    const espnName = getEspnDisplayName(key, allStats)
+    if (normalizeName(espnName) === normalized && teamsMatch(ourTeam, allStats[key]?.find(s => s.team)?.team)) return key
   }
 
   // 2. One name contains the other (handles "Darius Acuff" vs "Darius Acuff Jr") — require team match
-  for (const en of espnNames) {
-    const n = normalizeName(en)
+  for (const key of allStatsKeys) {
+    const espnName = getEspnDisplayName(key, allStats)
+    const n = normalizeName(espnName)
     if ((n === normalized || n.startsWith(normalized + ' ') || normalized.startsWith(n + ' ')) &&
-        teamsMatch(ourTeam, allStats[en]?.find(s => s.team)?.team)) return en
+        teamsMatch(ourTeam, allStats[key]?.find(s => s.team)?.team)) return key
   }
 
   const parts = normalized.split(' ').filter(Boolean)
@@ -258,15 +271,17 @@ function findBestNameMatch(ourName, espnNames, allStats, ourTeam) {
   const firstInitial = firstName[0]
 
   // 3. First initial + last name — require team match. When multiple (e.g. Cameron/Cayden Boozer), require full first name.
-  const fiLastCandidates = espnNames.filter(en => {
-    const n = normalizeName(en)
+  const fiLastCandidates = allStatsKeys.filter(key => {
+    const espnName = getEspnDisplayName(key, allStats)
+    const n = normalizeName(espnName)
     const nameOk = n.includes(lastName) && (n.startsWith(firstInitial + ' ') || n.startsWith(firstInitial))
-    return nameOk && teamsMatch(ourTeam, allStats[en]?.find(s => s.team)?.team)
+    return nameOk && teamsMatch(ourTeam, allStats[key]?.find(s => s.team)?.team)
   })
   if (fiLastCandidates.length === 1) return fiLastCandidates[0]
   if (fiLastCandidates.length > 1 && firstName.length >= 2) {
-    const byFirstName = fiLastCandidates.filter(en => {
-      const espnFirst = normalizeName(en).split(' ')[0] || ''
+    const byFirstName = fiLastCandidates.filter(key => {
+      const espnName = getEspnDisplayName(key, allStats)
+      const espnFirst = normalizeName(espnName).split(' ')[0] || ''
       return espnFirst === firstName || espnFirst.startsWith(firstName) || firstName.startsWith(espnFirst)
     })
     if (byFirstName.length === 1) return byFirstName[0]
@@ -354,10 +369,10 @@ export async function syncTournamentScores(onProgress) {
       if (Object.keys(gamePlayers).length === 0) {
         gamePlayers = parsePlayerPointsFromScoreboard(event, roundName)
       }
-      for (const [name, stats] of Object.entries(gamePlayers)) {
-        if (!allStats[name]) allStats[name] = []
-        const exists = allStats[name].some(s => s.roundName === stats.roundName)
-        if (!exists) allStats[name].push(stats)
+      for (const [key, stats] of Object.entries(gamePlayers)) {
+        if (!allStats[key]) allStats[key] = []
+        const exists = allStats[key].some(s => s.roundName === stats.roundName)
+        if (!exists) allStats[key].push(stats)
       }
       if (isCompleted) newlyCompletedEvents.push(String(event.id))
     }
@@ -367,18 +382,18 @@ export async function syncTournamentScores(onProgress) {
     await supabase.from('settings').upsert({ key: 'synced_completed_events', value: JSON.stringify([...merged]), updated_at: new Date().toISOString() })
   }
 
-  const espnNames = Object.keys(allStats)
-  onProgress?.(`Found stats for ${espnNames.length} players. Matching to all players...`)
+  const allStatsKeys = Object.keys(allStats)
+  onProgress?.(`Found stats for ${allStatsKeys.length} players. Matching to all players...`)
 
   const byEspnPlayerId = {}
-  for (const en of espnNames) {
-    const id = allStats[en]?.find(s => s.espnPlayerId)?.espnPlayerId
-    if (id) byEspnPlayerId[id] = en
+  for (const key of allStatsKeys) {
+    const id = allStats[key]?.find(s => s.espnPlayerId)?.espnPlayerId
+    if (id) byEspnPlayerId[id] = key
   }
 
   const { data: allPlayers, error } = await supabase
     .from('players')
-    .select('id, name, team, drafter_id, espn_player_id')
+    .select('id, name, team, drafter_id, espn_player_id, espn_team_id')
 
   if (error) throw new Error('Failed to fetch players from DB: ' + error.message)
 
@@ -392,7 +407,7 @@ export async function syncTournamentScores(onProgress) {
 
     if (player.espn_player_id && byEspnPlayerId[player.espn_player_id]) {
       const candidate = byEspnPlayerId[player.espn_player_id]
-      if (!namesCompatible(player.name, candidate)) {
+      if (!namesCompatible(player.name, getEspnDisplayName(candidate, allStats))) {
         // espn_player_id points to wrong person (e.g. Cameron vs Cayden Boozer) — fall back to name match
       } else {
         const stats = allStats[candidate]
@@ -406,7 +421,7 @@ export async function syncTournamentScores(onProgress) {
     }
 
     if (!espnName) {
-      espnName = findBestNameMatch(player.name, espnNames, allStats, player.team)
+      espnName = findBestNameMatch(player.name, allStatsKeys, allStats, player.team)
     }
 
     if (!espnName || matchedEspnNames.has(espnName)) {
@@ -424,28 +439,36 @@ export async function syncTournamentScores(onProgress) {
         { onConflict: 'player_id,round_name' }
       )
     }
-    if (espnPlayerId && espnPlayerId !== player.espn_player_id) {
-      await supabase.from('players').update({ espn_player_id: espnPlayerId }).eq('id', player.id)
+    const updates = {}
+    if (espnPlayerId && espnPlayerId !== player.espn_player_id) updates.espn_player_id = espnPlayerId
+    const espnTeamId = statsToWrite?.find(s => s.espnTeamId)?.espnTeamId
+    if (espnTeamId && espnTeamId !== player.espn_team_id) updates.espn_team_id = espnTeamId
+    const canonicalTeam = espnTeamId ? getTeamFromEspnId(espnTeamId) : null
+    if (canonicalTeam && canonicalTeam !== player.team) updates.team = canonicalTeam
+    if (Object.keys(updates).length) {
+      await supabase.from('players').update(updates).eq('id', player.id)
     }
-    matched.push({ ourName: player.name, espnName })
+    matched.push({ ourName: player.name, espnName: getEspnDisplayName(espnName, allStats) })
   }
 
   // Auto-create players for Tournament Leaders: ESPN has stats for someone not in DB
-  for (const espnName of espnNames) {
-    if (matchedEspnNames.has(espnName)) continue
+  for (const key of allStatsKeys) {
+    if (matchedEspnNames.has(key)) continue
 
-    const statsToWrite = allStats[espnName]
+    const statsToWrite = allStats[key]
     const team = statsToWrite?.find(s => s.team)?.team
+    const displayName = getEspnDisplayName(key, allStats)
     if (!team) continue
 
     const { data: existingByName } = await supabase
       .from('players')
       .select('id, drafter_id, team')
-      .eq('name', espnName)
+      .eq('name', displayName)
 
     if (existingByName?.length >= 1) {
       const byTeam = existingByName.filter(p => teamsMatch(p.team, team))
       const preferred = (byTeam.length ? byTeam : existingByName).sort((a, b) => (b.drafter_id ? 1 : 0) - (a.drafter_id ? 1 : 0))[0]
+      const espnTeamId = statsToWrite?.find(s => s.espnTeamId)?.espnTeamId
       for (const { roundName, points } of statsToWrite) {
         if (roundName === 'Play-In') continue
         await supabase.from('player_scores').upsert(
@@ -453,15 +476,22 @@ export async function syncTournamentScores(onProgress) {
           { onConflict: 'player_id,round_name' }
         )
       }
-      matchedEspnNames.add(espnName)
-      matched.push({ ourName: espnName, espnName })
+      const espnPlayerId = statsToWrite?.find(s => s.espnPlayerId)?.espnPlayerId
+      if (espnTeamId || espnPlayerId) {
+        const up = {}
+        if (espnTeamId) up.espn_team_id = espnTeamId
+        if (espnPlayerId) up.espn_player_id = espnPlayerId
+        await supabase.from('players').update(up).eq('id', preferred.id)
+      }
+      matchedEspnNames.add(key)
+      matched.push({ ourName: displayName, espnName: displayName })
       continue
     }
 
     const { data: existing } = await supabase
       .from('players')
       .select('id')
-      .eq('name', espnName)
+      .eq('name', displayName)
       .eq('team', team)
       .maybeSingle()
 
@@ -470,9 +500,10 @@ export async function syncTournamentScores(onProgress) {
       playerId = existing.id
     } else {
       const espnPlayerId = statsToWrite?.find(s => s.espnPlayerId)?.espnPlayerId || null
+      const espnTeamId = statsToWrite?.find(s => s.espnTeamId)?.espnTeamId || null
       const { data: newPlayer, error: insertErr } = await supabase
         .from('players')
-        .insert({ name: espnName, team, seed: null, drafter_id: null, espn_player_id: espnPlayerId })
+        .insert({ name: displayName, team, seed: null, drafter_id: null, espn_player_id: espnPlayerId, espn_team_id: espnTeamId })
         .select('id')
         .single()
       if (insertErr) continue
@@ -486,8 +517,8 @@ export async function syncTournamentScores(onProgress) {
         { onConflict: 'player_id,round_name' }
       )
     }
-    matchedEspnNames.add(espnName)
-    matched.push({ ourName: espnName, espnName, created: !existing })
+    matchedEspnNames.add(key)
+    matched.push({ ourName: displayName, espnName: displayName, created: !existing })
   }
 
   // Remove duplicate players (same name+team): keep drafted, delete auto-created extras
@@ -520,12 +551,18 @@ export async function syncTournamentScores(onProgress) {
     await supabase.from('players').delete().in('id', toRemove)
   }
 
-  // Elimination: from completed games, loser team → all players on that team
-  const playerIdsToEliminate = (allPlayers || [])
-    .filter(p => p.team && isTeamEliminated(p.team, loserTeamIds))
+  // Elimination: player_id → espn_team_id → in loserTeamIds?
+  const { data: playersForElimination } = await supabase
+    .from('players')
+    .select('id, espn_team_id, team')
+  const playerIdsToEliminate = (playersForElimination || [])
+    .filter(p => {
+      const teamId = p.espn_team_id || getEspnId(p.team)
+      return teamId && loserTeamIds.has(teamId)
+    })
     .map(p => p.id)
   const eliminateSet = new Set(playerIdsToEliminate)
-  const playerIdsToClear = (allPlayers || []).filter(p => !eliminateSet.has(p.id)).map(p => p.id)
+  const playerIdsToClear = (playersForElimination || []).filter(p => !eliminateSet.has(p.id)).map(p => p.id)
   // Batch updates to avoid URI length limits with large .in() arrays
   const BATCH = 50
   for (let i = 0; i < playerIdsToEliminate.length; i += BATCH) {
