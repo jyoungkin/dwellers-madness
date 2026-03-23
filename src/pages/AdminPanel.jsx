@@ -353,18 +353,13 @@ function EspnSyncTab() {
   }, [])
 
   async function runReset() {
-    if (!confirm('Clear all scores and remove auto-created players? Drafted players and draft picks will be kept.')) return
+    if (!confirm('Clear all scores and ESPN match data? All players (drafted + pool) stay; run ESPN Sync to re-pull stats.')) return
     setResetting(true)
     setResult(null)
     try {
       await supabase.from('player_scores').delete().or('id.eq.00000000-0000-0000-0000-000000000000,id.neq.00000000-0000-0000-0000-000000000000')
-      await supabase.from('players').delete().is('drafter_id', null)
       await supabase.from('settings').delete().eq('key', 'synced_completed_events')
-      const { data: remaining } = await supabase.from('players').select('id')
-      if (remaining?.length) {
-        const ids = remaining.map(p => p.id)
-        await supabase.from('players').update({ espn_player_id: null, espn_team_id: null }).in('id', ids)
-      }
+      await supabase.from('players').update({ espn_player_id: null, espn_team_id: null }).neq('id', '00000000-0000-0000-0000-000000000000')
       setResult({ ok: true })
       window.dispatchEvent(new Event('espn-sync-complete'))
     } catch (err) {
@@ -430,7 +425,7 @@ function EspnSyncTab() {
       {/* Reset success */}
       {result?.ok && (
         <div className="bg-green-50 border border-green-200 text-green-700 rounded-xl p-4">
-          Scores cleared. Auto-created players removed. Run Refresh Scores to pull today&apos;s data.
+          Scores cleared; ESPN match fields reset. Run Refresh Scores to pull today&apos;s data.
         </div>
       )}
 
@@ -462,8 +457,8 @@ function EspnSyncTab() {
                   {result.unmatched.map((n, i) => <li key={i} className="text-yellow-800">{n}</li>)}
                 </ul>
                 <p className="text-xs text-yellow-600">
-                  For unmatched players, use the Scores tab to enter points manually. 
-                  Make sure their name in the Players tab matches ESPN's spelling exactly.
+                  For unmatched players, use the Scores tab to enter points manually.
+                  Make sure their name in the Players tab matches ESPN&apos;s spelling exactly.
                 </p>
               </>
             )}

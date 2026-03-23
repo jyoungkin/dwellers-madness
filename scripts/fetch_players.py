@@ -80,12 +80,18 @@ TEAM_TO_ESPN_ID: dict[str, str] = {
     "Clemson":               "228",
     "Iowa":                  "2294",
     "Texas A&M":             "245",
+    "Texas":                 "251",   # West / First Four (was missing — no pool players)
     "Virginia Commonwealth": "2670",
+    "VCU":                   "2670",
     "McNeese State":         "2377",
+    "McNeese":               "2377",
     "Troy":                  "2653",
     "Pennsylvania":          "219",
+    "Penn":                  "219",
     "Idaho":                 "70",
     "Lehigh":                "2329",
+    "Prairie View":          "2640",
+    "Prairie View A&M":      "2640",
     # West Region
     "Arizona":               "12",
     "Purdue":                "2509",
@@ -94,6 +100,7 @@ TEAM_TO_ESPN_ID: dict[str, str] = {
     "Wisconsin":             "275",
     "Brigham Young":         "252",
     "Miami (FL)":            "2390",
+    "Miami":                 "2390",  # bracket label "Miami" (West)
     "Villanova":             "222",
     "Utah State":            "328",
     "Missouri":              "142",
@@ -101,6 +108,7 @@ TEAM_TO_ESPN_ID: dict[str, str] = {
     "High Point":            "2272",
     "Hawaii":                "62",
     "Kennesaw State":        "338",
+    "Kennesaw St":           "338",
     "Queens (NC)":           "2511",
     "Long Island University": "112358",
     # Midwest Region
@@ -118,8 +126,13 @@ TEAM_TO_ESPN_ID: dict[str, str] = {
     "Akron":                 "2006",
     "Hofstra":               "2275",
     "Wright State":          "2750",
+    "Wright St":             "2750",
     "Tennessee State":       "2634",
+    "Tennessee St":          "2634",
     "Howard":                "47",
+    "UMBC":                  "113",
+    "Miami OH":              "2170",  # Midwest First Four / bracket "Miami OH"
+    "Miami (Ohio)":          "2170",
 }
 
 

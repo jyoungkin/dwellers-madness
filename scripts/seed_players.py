@@ -5,12 +5,14 @@ Reads the output of fetch_real_bracket.py and fetch_players.py and
 seeds the Supabase `players` table for your draft.
 
 Workflow:
-  1. cd "C:\\Users\\JohnYoungkin\\Downloads\\NCAA tourney predictor"
-  2. python fetch_real_bracket.py        # produces data/bracket_2026.json
-  3. python fetch_players.py             # produces data/player_stats.csv
-  4. cd back to the playerdraft folder
-  5. pip install supabase python-dotenv pandas
-  6. python scripts/seed_players.py
+  1. Keep predictor's fetch_players.py in sync with playerdraft/scripts/fetch_players.py
+     (TEAM_TO_ESPN_ID must list every bracket team, e.g. Texas, UMBC, Miami OH, "Miami".)
+  2. cd "C:\\Users\\JohnYoungkin\\Downloads\\NCAA tourney predictor"
+  3. python fetch_real_bracket.py        # produces data/bracket_2026.json
+  4. python fetch_players.py             # produces data/player_stats.csv
+  5. cd back to the playerdraft folder
+  6. pip install supabase python-dotenv pandas
+  7. python scripts/seed_players.py
 
 Prerequisites:
   - .env file in the playerdraft root containing:
@@ -97,6 +99,28 @@ def load_seed_map(bracket_path: Path) -> dict[str, int]:
     return seed_map
 
 
+def _csv_team_to_bracket_team(csv_team: str, seed_map: dict[str, int]) -> str:
+    """Map CSV/manual team label to a key that exists in seed_map (from bracket JSON)."""
+    t = str(csv_team).strip()
+    if t in seed_map:
+        return t
+    # ESPN / export variants -> bracket name (first match in seed_map wins)
+    aliases: dict[str, tuple[str, ...]] = {
+        "VCU": ("Virginia Commonwealth",),
+        "St. John's (NY)": ("St John's", "St. John's", "St. John's (NY)"),
+        "St. John's": ("St John's", "St. John's (NY)"),
+        "Texas Longhorns": ("Texas",),
+        "Prairie View A&M": ("Prairie View",),
+        "Miami (Ohio)": ("Miami OH",),
+        "North Carolina State": ("NC State",),
+        "Cal Baptist": ("CA Baptist", "California Baptist"),
+    }
+    for cand in aliases.get(t, ()):
+        if cand in seed_map:
+            return cand
+    return t
+
+
 def load_players(players_path: Path, seed_map: dict[str, int]) -> list[dict]:
     """Load player_stats.csv, attach seeds, filter, and return upload-ready rows."""
     df = pd.read_csv(players_path)
@@ -117,7 +141,9 @@ def load_players(players_path: Path, seed_map: dict[str, int]) -> list[dict]:
         sys.exit(1)
 
     # Join seed from bracket (drops any player whose team isn't in the main draw)
-    df["seed"] = df["team"].map(seed_map)
+    df["team"] = df["team"].astype(str).str.strip()
+    df["_bracket_team"] = df["team"].map(lambda x: _csv_team_to_bracket_team(x, seed_map))
+    df["seed"] = df["_bracket_team"].map(seed_map)
     dropped = df[df["seed"].isna()]["team"].unique().tolist()
     if dropped:
         print(f"  Skipping teams not in main bracket (First Four / not found): {dropped}")
@@ -133,7 +159,7 @@ def load_players(players_path: Path, seed_map: dict[str, int]) -> list[dict]:
     for _, row in df.iterrows():
         rows.append({
             "name":         str(row["name"]).strip(),
-            "team":         str(row["team"]).strip(),
+            "team":         str(row["_bracket_team"]).strip(),
             "seed":         int(row["seed"]),
             "season_ppg":   float(row["ppg"]),
             "is_eliminated": False,
@@ -145,7 +171,7 @@ def load_players(players_path: Path, seed_map: dict[str, int]) -> list[dict]:
 
 def main():
     print("=" * 60)
-    print("  Seeding Supabase — Player Draft Pool")
+    print("  Seeding Supabase - Player Draft Pool")
     print("=" * 60)
 
     validate_env()
@@ -174,25 +200,25 @@ def main():
         for name, s in first_four_teams:
             print(f"    #{s:2d} {name}")
     else:
-        print("  ⚠ No First Four teams in bracket — run full run_seed.ps1 (not run_seed_data_only)")
+        print("  WARN: No First Four teams in bracket - run full run_seed.ps1 (not run_seed_data_only)")
 
     for seed in sorted(set(seed_map.values())):
         teams = [t for t, s in seed_map.items() if s == seed]
         print(f"  Seed {seed:2d}: {', '.join(teams)}")
 
     rows = load_players(PLAYERS_FILE, seed_map)
-    print(f"\nPlayers to upload (PPG ≥ {MIN_PPG}): {len(rows)}")
+    print(f"\nPlayers to upload (PPG >= {MIN_PPG}): {len(rows)}")
 
     # Quick verification: teams in pool
     teams_in_pool = sorted(set(r["team"] for r in rows))
     print(f"Teams in pool: {len(teams_in_pool)}")
     if len(teams_in_pool) < 68:
-        print(f"  ⚠ Expected 68 teams (60 main + 8 First Four). Re-run full run_seed.ps1 to fetch March 17 bracket.")
+        print(f"  WARN: Expected 68 teams (60 main + 8 First Four). Re-run full run_seed.ps1 to fetch March 17 bracket.")
     st_johns = [r for r in rows if "st" in r["team"].lower() and "john" in r["team"].lower()]
     if st_johns:
-        print(f"  ✓ St. John's: {len(st_johns)} players")
+        print(f"  OK: St. John's: {len(st_johns)} players")
     else:
-        print("  ⚠ St. John's: 0 players (check name mapping if expected)")
+        print("  WARN: St. John's: 0 players (check name mapping if expected)")
 
     if not rows:
         print("No players found. Lower MIN_PPG or check your CSV/bracket files.")
@@ -221,7 +247,7 @@ def main():
     for i in range(0, total, batch_size):
         batch = rows[i : i + batch_size]
         sb.table("players").insert(batch).execute()
-        print(f"  Inserted {i + 1}–{min(i + batch_size, total)} / {total}")
+        print(f"  Inserted {i + 1}-{min(i + batch_size, total)} / {total}")
 
     print(f"\nDone! {total} players are now in Supabase.")
     print("Open Admin → Players in your draft app to verify.")

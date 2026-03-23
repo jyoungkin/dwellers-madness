@@ -114,6 +114,33 @@ export function getTeamFromEspnId(espnId) {
   return ESPN_ID_TO_TEAM[espnId] || null
 }
 
+/** Bracket team name -> seed (2026, matches fetch_players region order). Every team has a seed. */
+const TEAM_TO_SEED = {
+  Duke: 1, Connecticut: 2, "Michigan State": 3, Kansas: 4, "St. John's (NY)": 5, Louisville: 6, UCLA: 7, "Ohio State": 8, TCU: 9, UCF: 10, "South Florida": 11, "Northern Iowa": 12, "California Baptist": 13, "North Dakota State": 14, Furman: 15, Siena: 16,
+  Florida: 1, Houston: 2, Illinois: 3, Nebraska: 4, Vanderbilt: 5, "North Carolina": 6, "Saint Mary's": 7, Clemson: 8, Iowa: 9, "Texas A&M": 10, "Virginia Commonwealth": 11, "McNeese State": 12, Troy: 13, Pennsylvania: 14, Idaho: 15, Lehigh: 16,
+  Arizona: 1, Purdue: 2, Gonzaga: 3, Arkansas: 4, Wisconsin: 5, "Brigham Young": 6, "Miami (FL)": 7, Villanova: 8, "Utah State": 9, Missouri: 10, "NC State": 11, Texas: 11, "High Point": 12, Hawaii: 13, "Kennesaw State": 14, "Queens (NC)": 15, "Long Island University": 16,
+  Michigan: 1, "Iowa State": 2, Virginia: 3, Alabama: 4, "Texas Tech": 5, Tennessee: 6, Kentucky: 7, Georgia: 8, "Saint Louis": 9, "Santa Clara": 10, SMU: 11, Akron: 12, Hofstra: 13, "Wright State": 14, "Tennessee State": 15, Howard: 16,
+  "Michigan St": 3, "St John's": 5, "St. John's": 5, "CA Baptist": 13, "Cal Baptist": 13, "N Dakota St": 14, McNeese: 12, Penn: 14, BYU: 6, "Miami FL": 7, "Miami OH": 16, VCU: 11, "Iowa St": 2, "Ohio St": 8, "Wright St": 14, "Tennessee St": 15, Queens: 15, "Long Island": 16, "Prairie View A&M": 16, "Prairie View": 16, UMBC: 16,
+}
+const ESPN_ID_TO_SEED = {}
+for (const [team, espnId] of Object.entries(TEAM_TO_ESPN_ID)) {
+  const seed = TEAM_TO_SEED[team]
+  if (seed != null && ESPN_ID_TO_SEED[espnId] == null) {
+    ESPN_ID_TO_SEED[espnId] = typeof seed === 'number' ? seed : parseInt(String(seed), 10)
+  }
+}
+// Ensure every team ID has a seed — fail fast if any are missing
+const uniqueEspnIds = [...new Set(Object.values(TEAM_TO_ESPN_ID))]
+for (const id of uniqueEspnIds) {
+  if (ESPN_ID_TO_SEED[id] == null) {
+    const teams = Object.entries(TEAM_TO_ESPN_ID).filter(([, v]) => v === id).map(([k]) => k)
+    throw new Error(`ESPN team ID ${id} (${teams.join(', ')}) has no seed in TEAM_TO_SEED`)
+  }
+}
+export function getSeedForEspnTeamId(espnTeamId) {
+  return ESPN_ID_TO_SEED[espnTeamId] ?? null
+}
+
 /**
  * Fetches upcoming (not yet completed) tournament games and returns
  * Map<espnTeamId, { opponent, opponentSeed }>. Uses ESPN team IDs for matching.

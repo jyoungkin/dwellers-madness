@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase.js'
-import { fetchUpcomingOpponents, getOpponentForTeam } from '../lib/espnUpcoming.js'
+import { fetchUpcomingOpponents, getOpponentForTeam, getSeedForEspnTeamId } from '../lib/espnUpcoming.js'
 
 /** Rounds that count toward scoring. Play-In excluded (teams stay in dataset). */
 const ROUNDS = ['Round of 64', 'Round of 32', 'Sweet Sixteen', 'Elite Eight', 'Final Four', 'Championship']
@@ -26,6 +26,12 @@ const DRAFT_FILTERS = [
   { id: 'drafted', label: 'Drafted only' },
 ]
 
+const ELIMINATION_FILTERS = [
+  { id: 'all', label: 'All' },
+  { id: 'active', label: 'Active only' },
+  { id: 'eliminated', label: 'Eliminated only' },
+]
+
 const PAGE_SIZE = 20
 
 function getPoints(player, round) {
@@ -39,8 +45,12 @@ function getTotal(player) {
   }, 0)
 }
 
+function getEffectiveSeed(player) {
+  return player.seed ?? getSeedForEspnTeamId(player.espn_team_id) ?? 0
+}
+
 function passesSeedFilter(player, filterId) {
-  const seed = player.seed ?? 0
+  const seed = getEffectiveSeed(player)
   if (filterId === 'all') return true
   if (filterId === '5+') return seed >= 5
   if (filterId === 'dd') return seed >= 10
@@ -54,6 +64,9 @@ export default function TournamentLeaders() {
   const [selectedRound, setSelectedRound] = useState('total')
   const [seedFilter, setSeedFilter] = useState('all')
   const [draftFilter, setDraftFilter] = useState('all')
+  const [eliminationFilter, setEliminationFilter] = useState('all')
+  /** When true, show pool players with 0 synced tournament pts (tie-break: season PPG). */
+  const [includeZeroTournamentPts, setIncludeZeroTournamentPts] = useState(false)
   const [page, setPage] = useState(0)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [upcomingOpponents, setUpcomingOpponents] = useState({})
@@ -77,7 +90,7 @@ export default function TournamentLeaders() {
       const { data, error } = await supabase
         .from('players')
         .select(`
-          id, name, team, seed, is_eliminated, drafter_id,
+          id, name, team, seed, espn_team_id, is_eliminated, drafter_id, season_ppg,
           drafter:drafter_id(name),
           player_scores(round_name, points)
         `)
@@ -94,7 +107,7 @@ export default function TournamentLeaders() {
   }, [refreshTrigger])
 
   // Reset page when filters change (must run before any conditional return)
-  useEffect(() => { setPage(0) }, [selectedRound, seedFilter, draftFilter])
+  useEffect(() => { setPage(0) }, [selectedRound, seedFilter, draftFilter, eliminationFilter, includeZeroTournamentPts])
 
   if (loading) return <div className="text-center py-16 text-slate-500">Loading leaders...</div>
   if (error) return <div className="text-center py-16 text-red-500">Error: {error}</div>
@@ -105,19 +118,26 @@ export default function TournamentLeaders() {
   ]
 
   function getLeaders(roundId) {
-    let list = players.filter(p => !p.is_eliminated)
+    let list = [...players]
+    if (eliminationFilter === 'active') list = list.filter(p => !p.is_eliminated)
+    else if (eliminationFilter === 'eliminated') list = list.filter(p => p.is_eliminated)
     if (draftFilter === 'drafted') list = list.filter(p => !!p.drafter_id)
     list = list.filter(p => passesSeedFilter(p, seedFilter))
+    const seasonPpg = p => Number(p.season_ppg) || 0
     if (roundId === 'total') {
-      list = list
-        .map(p => ({ ...p, _pts: getTotal(p) }))
-        .filter(p => p._pts > 0)
-        .sort((a, b) => b._pts - a._pts)
+      list = list.map(p => ({ ...p, _pts: getTotal(p), _ppg: seasonPpg(p) }))
+      if (!includeZeroTournamentPts) list = list.filter(p => p._pts > 0)
+      list.sort((a, b) => {
+        if (b._pts !== a._pts) return b._pts - a._pts
+        return b._ppg - a._ppg
+      })
     } else {
-      list = list
-        .map(p => ({ ...p, _pts: getPoints(p, roundId) }))
-        .filter(p => p._pts > 0)
-        .sort((a, b) => b._pts - a._pts)
+      list = list.map(p => ({ ...p, _pts: getPoints(p, roundId), _ppg: seasonPpg(p) }))
+      if (!includeZeroTournamentPts) list = list.filter(p => p._pts > 0)
+      list.sort((a, b) => {
+        if (b._pts !== a._pts) return b._pts - a._pts
+        return b._ppg - a._ppg
+      })
     }
     return list
   }
@@ -132,7 +152,7 @@ export default function TournamentLeaders() {
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-[#1e3a5f]">Tournament Leaders</h2>
         <p className="text-sm text-slate-500 mt-0.5">
-          Top scorers by round. Highlighted = drafted in your league.
+          Top scorers by round. Highlighted = drafted in your league. Turn on &quot;Include 0 tournament pts&quot; to see the full pool when sync hasn&apos;t matched yet.
         </p>
       </div>
 
@@ -162,6 +182,18 @@ export default function TournamentLeaders() {
           </select>
         </div>
         <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-slate-600">Status:</span>
+          <select
+            value={eliminationFilter}
+            onChange={e => setEliminationFilter(e.target.value)}
+            className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white"
+          >
+            {ELIMINATION_FILTERS.map(f => (
+              <option key={f.id} value={f.id}>{f.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-slate-600">Show:</span>
           <select
             value={draftFilter}
@@ -173,6 +205,15 @@ export default function TournamentLeaders() {
             ))}
           </select>
         </div>
+        <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={includeZeroTournamentPts}
+            onChange={e => setIncludeZeroTournamentPts(e.target.checked)}
+            className="rounded border-slate-300"
+          />
+          Include 0 tournament pts (sort by season PPG)
+        </label>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -220,7 +261,7 @@ export default function TournamentLeaders() {
                       )}
                     </td>
                     <td className="px-3 py-2 text-slate-500 hidden sm:table-cell">
-                      {player.team}
+                      {getEffectiveSeed(player) ? `#${getEffectiveSeed(player)} ` : ''}{player.team}
                     </td>
                     <td className="px-3 py-2 text-center font-bold text-orange-500">{player._pts}</td>
                   </tr>
@@ -254,7 +295,7 @@ export default function TournamentLeaders() {
       )}
 
       <p className="mt-3 text-xs text-slate-400">
-        {allLeaders.length} players. Eliminated teams hidden. Sync scores from Admin → ESPN Sync to update.
+        {allLeaders.length} players. Sync scores from Admin → ESPN Sync to update.
       </p>
     </div>
   )
